@@ -30,7 +30,7 @@ check_http() {
     fi
 
     echo "$cmkcode http - HTTP $status" #; ${time} seconds"
-    return $code
+    return $cmkcode
 }
 
 # check a generic tcp endpoint
@@ -47,7 +47,38 @@ check_tcp() {
     fi
 
     echo "$cmkcode tcp - $text"
-    return $out
+    return $cmkcode
+}
+
+# check via icmp
+check_icmp() {
+    local pingargs=( -c 2 )
+    if [[ "$(uname)" = MINGW* ]]
+    then
+        pingargs=( -n 3 )
+    fi
+
+    local out=$( ping "${ARGS[@]}" -w 3 $1 | grep -o -P "[0-9]+%" | cut -d'%' -f1 )
+
+    local cmkcode=2
+    local cmktext="CRIT"
+    local text="Ping failed"
+
+    re='^[0-9]+$'
+    if [[ $out =~ $re ]] && [ $out -gt 0 ] && [ $out -lt 100 ]; then
+        cmkcode=1
+        cmktext="WARN"
+        text="Ping succeeded (${out}% loss)"
+    elif [[ $out =~ $re ]] && [ $out -le 0 ]; then
+        cmkcode=0
+        cmktext="OK"
+        text="Ping succeeded (${out}% loss)"
+    elif [[ $out =~ $re ]]; then
+        text="$text (${out}% loss)"
+    fi
+
+    echo "$cmkcode icmp - $text"
+    return $cmkcode
 }
 
 # handle output of check, print update when it is a change
@@ -146,6 +177,7 @@ ARG_INTERVAL=30
 UNKNOWN_OPTION=0
 URLS_HTTP=()
 URLS_TCP=()
+URLS_ICMP=()
 
 if [ $# -ge 1 ]
 then
@@ -160,6 +192,10 @@ then
             --http)
                 shift
                 URLS_HTTP+=("$1")
+                ;;
+            --icmp)
+                shift
+                URLS_ICMP+=("$1")
                 ;;
             --interval)
                 shift
@@ -190,7 +226,7 @@ then
         echo "Unknown option."
     fi
 
-    echo "Usage: $0 [--interval 30] [--tcp example.com:4242[;optsrvname]] [--http https://example.com]"
+    echo "Usage: $0 [--interval 30] [--tcp example.com:4242[;optsrvname]] [--http https://example.com] [--icmp 8.8.8.8]"
     exit
 fi
 
@@ -222,6 +258,13 @@ do
     for value in "${URLS_TCP[@]}"
     do
         exec_check "check_tcp" "$value" "$I"
+        I=$(($I+1))
+    done
+
+    # tcp icmp
+    for value in "${URLS_ICMP[@]}"
+    do
+        exec_check "check_icmp" "$value" "$I"
         I=$(($I+1))
     done
 
