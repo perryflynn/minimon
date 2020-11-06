@@ -1,5 +1,9 @@
 #!/bin/bash
 
+# minimon - Minimalistic monitoring
+# 2020 by Christian Blechert <christian@serverless.industries>
+# https://github.com/perryflynn/minimon
+
 # console colors
 RED="\033[0;31m"
 GREEN="\033[0;32m"
