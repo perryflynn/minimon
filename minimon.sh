@@ -23,6 +23,7 @@ check_http() {
     if [ $ARG_VERBOSE -eq 1 ]; then
         >&2 echo -e "${PURPLE}[DEBUG] check_http $1${RESET}"
         >&2 echo -e -n "$BLUE"
+        >&2 echo -e "time_spend\thttp_status\tconnection_count\texit_code"
         >&2 echo -e "$out"
         >&2 echo -n -e "$RESET"
     fi
