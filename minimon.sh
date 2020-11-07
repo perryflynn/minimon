@@ -9,6 +9,7 @@ RED="\033[0;31m"
 GREEN="\033[0;32m"
 YELLOW="\033[0;33m"
 PURPLE="\033[0;35m"
+BLUE="\033[0;36m"
 RESET="\033[0m"
 GRAY="\033[1;30m"
 
@@ -18,6 +19,13 @@ check_http() {
         --max-time 5 --connect-timeout 5 -k --max-redirs 32 -L \
         -w "\n%{time_total}\t%{http_code}\t%{num_connects}" \
         "$1"; echo -e "\t$?" 2> /dev/null ) | tail -n 1)
+
+    if [ $ARG_VERBOSE -eq 1 ]; then
+        >&2 echo -e "${PURPLE}[DEBUG] check_http $1${RESET}"
+        >&2 echo -e -n "$BLUE"
+        >&2 echo -e "$out"
+        >&2 echo -n -e "$RESET"
+    fi
 
     local time=$(echo -e "$out" | awk '{print $1}')
     local status=$(echo -e "$out" | awk '{print $2}')
@@ -39,7 +47,16 @@ check_http() {
 
 # check a generic tcp endpoint
 check_tcp() {
-    local out=$( echo "$(timeout 1 curl -v telnet://$1 2>&1)" | grep -F "* Connected to " > /dev/null; echo $? )
+    local out=$( echo "$(timeout 1 curl -v telnet://$1 2>&1)" )
+
+    if [ $ARG_VERBOSE -eq 1 ]; then
+        >&2 echo -e "${PURPLE}[DEBUG] check_tcp $1${RESET}"
+        >&2 echo -e -n "$BLUE"
+        >&2 echo -e "$out"
+        >&2 echo -n -e "$RESET"
+    fi
+
+    out=$( echo "$out" | grep -F "* Connected to " > /dev/null; echo $? )
 
     local cmkcode=2
     local cmktext="CRIT"
@@ -62,7 +79,16 @@ check_icmp() {
         pingargs=( -n 3 )
     fi
 
-    local out=$( ping "${ARGS[@]}" -w 3 $1 | grep -o -P "[0-9]+%" | cut -d'%' -f1 )
+    local out=$( ping "${ARGS[@]}" -w 3 $1 )
+
+    if [ $ARG_VERBOSE -eq 1 ]; then
+        >&2 echo -e "${PURPLE}[DEBUG] check_icmp $1${RESET}"
+        >&2 echo -e -n "$BLUE"
+        >&2 echo -e "$out"
+        >&2 echo -n -e "$RESET"
+    fi
+
+    out=$( echo "$out" | grep -o -P "[0-9]+%" | cut -d'%' -f1 )
 
     local cmkcode=2
     local cmktext="CRIT"
@@ -149,9 +175,14 @@ handle_result() {
         laststatus[$index]="$statusmsghash;$exitcode"
         statusts[$index]=$(date +%s)
         return 1
-    fi
 
-    return 0
+    else
+        if [ $ARG_VERBOSE -eq 1 ]; then
+            >&2 echo -e "${PURPLE}[DEBUG] State of check_$checktype $url unchanged${RESET}"
+        fi
+
+        return 0
+    fi
 }
 
 # execute a check
@@ -177,6 +208,7 @@ exec_check() {
 
 # Arguments
 ARG_HELP=0
+ARG_VERBOSE=0
 ARG_INTERVAL=30
 UNKNOWN_OPTION=0
 URLS_HTTP=()
@@ -208,6 +240,9 @@ then
             -h|--help)
                 ARG_HELP=1
                 ;;
+            -v|--verbose)
+                ARG_VERBOSE=1
+                ;;
             *)
                 # unknown option
                 ARG_HELP=1
@@ -230,7 +265,22 @@ then
         echo "Unknown option."
     fi
 
-    echo "Usage: $0 [--interval 30] [--tcp example.com:4242[;optsrvname]] [--http https://example.com] [--icmp 8.8.8.8]"
+    echo "minimon by Christian Blechert"
+    echo "https://github.com/perryflynn/minimon"
+    echo
+    echo "Usage: $0 [--interval 30] [--tcp \"example.com:4242[;aliasname]\"]"
+    echo
+    echo "--interval n      Delay between two checks"
+    echo "--tcp host:port   Check a generic TCP port"
+    echo "--http url        Check a HTTP(S) URL"
+    echo "--icmp host       Ping a Hostname/IP"
+    echo
+    echo "Append a alias name to a check separated by a semicolon:"
+    echo "--icmp \"8.8.8.8;google\""
+    echo
+    echo "-v, --verbose     Enable verbose mode"
+    echo "-h, --help        Print this help"
+    echo
     exit
 fi
 

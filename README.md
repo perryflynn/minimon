@@ -10,6 +10,24 @@ Bash script to monitor HTTP and generic TCP services.
 
 ## Usage
 
+```txt
+minimon by Christian Blechert
+https://github.com/perryflynn/minimon
+
+Usage: ./minimon.sh [--interval 30] [--tcp "example.com:4242[;aliasname]"]
+
+--interval n      Delay between two checks
+--tcp host:port   Check a generic TCP port
+--http url        Check a HTTP(S) URL
+--icmp host       Ping a Hostname/IP
+
+Append a alias name to a check separated by a semicolon:
+--icmp "8.8.8.8;google"
+
+-v, --verbose     Enable verbose mode
+-h, --help        Print this help
+```
+
 ```sh
 ./minimon.sh --interval 60 \
     --tcp "localhost:22" \
