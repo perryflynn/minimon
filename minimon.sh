@@ -62,7 +62,7 @@ check_tcp() {
         proto="-6"
     fi
 
-    local out=$( echo "$(timeout 1 curl -v $proto telnet://$1 2>&1)" )
+    local out=$( echo "$(timeout 2 curl -v $proto telnet://$1 2>&1)" )
 
     if [ $ARG_VERBOSE -eq 1 ]; then
         >&2 echo -e "${PURPLE}[DEBUG] check_tcp $1${RESET}"
@@ -107,7 +107,7 @@ check_icmp() {
         pingargs=( ping -c 3 )
     fi
 
-    local out=$( "${pingargs[@]}" -w 3 $1 )
+    local out=$( "${pingargs[@]}" -w 5 $1 )
 
     if [ $ARG_VERBOSE -eq 1 ]; then
         >&2 echo -e "${PURPLE}[DEBUG] check_icmp $1${RESET}"
