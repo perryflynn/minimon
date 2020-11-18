@@ -16,24 +16,19 @@ GRAY="\033[1;30m"
 # check a http endpoint
 check_http() {
     local proto=""
+    local protoname=""
     if [ $2 -eq 4 ]; then
         proto="-4"
+        protoname="4"
     elif [ $2 -eq 6 ]; then
         proto="-6"
+        protoname="6"
     fi
 
     local out=$(( curl --silent $proto \
         --max-time 5 --connect-timeout 5 -k --max-redirs 32 -L \
         -w "\n%{time_total}\t%{http_code}\t%{num_connects}" \
         "$1"; echo -e "\t$?" 2> /dev/null ) | tail -n 1)
-
-    if [ $ARG_VERBOSE -eq 1 ]; then
-        >&2 echo -e "${PURPLE}[DEBUG] check_http $1${RESET}"
-        >&2 echo -e -n "$BLUE"
-        >&2 echo -e "time_spend\thttp_status\tconnection_count\texit_code"
-        >&2 echo -e "$out"
-        >&2 echo -n -e "$RESET"
-    fi
 
     local time=$(echo -e "$out" | awk '{print $1}')
     local status=$(echo -e "$out" | awk '{print $2}')
@@ -49,6 +44,14 @@ check_http() {
         cmktext="WARN"
     fi
 
+    if [ $ARG_VERBOSE -eq 1 ] || ( [ $ARG_ERRORS -eq 1 ] && [ $cmkcode -eq 2 ] ) || ( [ $ARG_WARNINGS -eq 1 ] && [ $cmkcode -eq 1 ] ); then
+        >&2 echo -e "${PURPLE}[DEBUG] check_http$protoname $1${RESET}"
+        >&2 echo -e -n "$BLUE"
+        >&2 echo -e "time_spend\thttp_status\tconnection_count\texit_code"
+        >&2 echo -e "$out"
+        >&2 echo -n -e "$RESET"
+    fi
+
     echo "$cmkcode http - HTTP $status" #; ${time} seconds"
     return $cmkcode
 }
@@ -56,20 +59,16 @@ check_http() {
 # check a generic tcp endpoint
 check_tcp() {
     local proto=""
+    local protoname=""
     if [ $2 -eq 4 ]; then
         proto="-4"
+        protoname="4"
     elif [ $2 -eq 6 ]; then
         proto="-6"
+        protoname="6"
     fi
 
     local out=$( echo "$(timeout 2 curl -v $proto telnet://$1 2>&1)" )
-
-    if [ $ARG_VERBOSE -eq 1 ]; then
-        >&2 echo -e "${PURPLE}[DEBUG] check_tcp $1${RESET}"
-        >&2 echo -e -n "$BLUE"
-        >&2 echo -e "$out"
-        >&2 echo -n -e "$RESET"
-    fi
 
     out=$( echo "$out" | grep -F "* Connected to " > /dev/null; echo $? )
 
@@ -82,6 +81,13 @@ check_tcp() {
         text="Connect successful"
     fi
 
+    if [ $ARG_VERBOSE -eq 1 ] || ( [ $ARG_ERRORS -eq 1 ] && [ $cmkcode -ne 0 ] ); then
+        >&2 echo -e "${PURPLE}[DEBUG] check_tcp$protoname $1${RESET}"
+        >&2 echo -e -n "$BLUE"
+        >&2 echo -e "$out"
+        >&2 echo -n -e "$RESET"
+    fi
+
     echo "$cmkcode tcp - $text"
     return $cmkcode
 }
@@ -89,50 +95,55 @@ check_tcp() {
 # check via icmp
 check_icmp() {
     local proto=""
+    local protoname=""
     local pingcmd=""
-    
+
     local pingargs=()
 
     if [ $2 -eq 4 ] && [[ "$(uname)" = MINGW* ]]; then
         # Windows IPv4
         pingargs=( ping -4 -n 3 )
+        protoname="4"
     elif [ $2 -eq 6 ] && [[ "$(uname)" = MINGW* ]]; then
         # Windows IPv6
         pingargs=( ping -6 -n 3 )
+        protoname="6"
     elif [ $2 -eq 6 ]; then
         # Linux IPv6
         pingargs=( ping6 -c 3 )
+        protoname="6"
     else
         # Linux IPv4
         pingargs=( ping -c 3 )
+        protoname="4"
     fi
 
-    local out=$( "${pingargs[@]}" -w 5 $1 )
+    local out=$( "${pingargs[@]}" -w 5 $1 2>&1 )
 
-    if [ $ARG_VERBOSE -eq 1 ]; then
-        >&2 echo -e "${PURPLE}[DEBUG] check_icmp $1${RESET}"
-        >&2 echo -e -n "$BLUE"
-        >&2 echo -e "$out"
-        >&2 echo -n -e "$RESET"
-    fi
-
-    out=$( echo "$out" | grep -o -P "[0-9]+%" | cut -d'%' -f1 )
+    local re='^[0-9]+$'
+    loss=$( echo "$out" | grep -o -P "[0-9]+%" | cut -d'%' -f1 )
 
     local cmkcode=2
     local cmktext="CRIT"
     local text="Ping failed"
 
-    re='^[0-9]+$'
-    if [[ $out =~ $re ]] && [ $out -gt 0 ] && [ $out -lt 100 ]; then
+    if [[ $loss =~ $re ]] && [ $loss -gt 0 ] && [ $loss -lt 100 ]; then
         cmkcode=1
         cmktext="WARN"
-        text="Ping succeeded (${out}% loss)"
-    elif [[ $out =~ $re ]] && [ $out -le 0 ]; then
+        text="Ping succeeded (${loss}% loss)"
+    elif [[ $loss =~ $re ]] && [ $loss -le 0 ]; then
         cmkcode=0
         cmktext="OK"
-        text="Ping succeeded (${out}% loss)"
-    elif [[ $out =~ $re ]]; then
-        text="$text (${out}% loss)"
+        text="Ping succeeded (${loss}% loss)"
+    elif [[ $loss =~ $re ]]; then
+        text="$text (${loss}% loss)"
+    fi
+
+    if [ $ARG_VERBOSE -eq 1 ] || ( [ $ARG_ERRORS -eq 1 ] && [ $cmkcode -eq 2 ] ) || ( [ $ARG_WARNINGS -eq 1 ] && [ $cmkcode -eq 1 ] ); then
+        >&2 echo -e "${PURPLE}[DEBUG] check_icmp$protoname $1${RESET}"
+        >&2 echo -e -n "$BLUE"
+        >&2 echo -e "$out"
+        >&2 echo -n -e "$RESET"
     fi
 
     echo "$cmkcode icmp - $text"
@@ -146,6 +157,7 @@ handle_result() {
     local url="$3"
     local servicename="$4"
     local proto="$5"
+    local timespend="$6"
 
     # split check output
     local exitcode=$(echo "$out" | awk '{print $1}')
@@ -192,6 +204,10 @@ handle_result() {
         echo -n " -"
         echo -n -e " ${statecolor}${statename} ($exitcode)${RESET}"
 
+        # time
+        echo -n " -"
+        echo -n -e " $GRAY${timespend}s$RESET"
+
         # protocol status code
         if [ ! -z "$statusmessage" ]
         then
@@ -228,11 +244,16 @@ exec_check() {
     local proto=$4
 
     # split url and service name
+    # echo "scale=3; $(($(date +%s%N | cut -b1-13) - $start))/1000" | bc
     local url=$(echo "$urlname" | awk -F  ";" '{print $1}')
     local servicename=$(echo "$urlname" | awk -F  ";" '{print $2}')
 
+    local starttime=$(date +%s%N | cut -b1-13)
+    local out=$($method "$url" "$proto")
+    local timespend=$(echo "scale=3; x=($(date +%s%N | cut -b1-13) - $starttime) / 1000; if(x<1 && x > 0) print 0; x" | bc -l)
+
     # execute check and give it to handler
-    handle_result $index "$($method "$url" "$proto")" "$url" "$servicename" "$proto"
+    handle_result $index "$out" "$url" "$servicename" "$proto" "$timespend"
     check_res=$?
 
     if [ $check_res -eq 1 ]
@@ -245,6 +266,8 @@ exec_check() {
 # Arguments
 ARG_HELP=0
 ARG_VERBOSE=0
+ARG_ERRORS=0
+ARG_WARNINGS=0
 ARG_INTERVAL=30
 UNKNOWN_OPTION=0
 URLS_HTTP=()
@@ -287,6 +310,12 @@ then
                 ;;
             -h|--help)
                 ARG_HELP=1
+                ;;
+            -e|--errors)
+                ARG_ERRORS=1
+                ;;
+            -w|--warnings)
+                ARG_WARNINGS=1
                 ;;
             -v|--verbose)
                 ARG_VERBOSE=1
@@ -333,6 +362,8 @@ then
     echo "--icmp \"8.8.8.8;google\""
     echo
     echo "-v, --verbose     Enable verbose mode"
+    echo "-w, --warnings    Show warning output"
+    echo "-e, --errors      Show error output"
     echo "-h, --help        Print this help"
     echo
     exit
