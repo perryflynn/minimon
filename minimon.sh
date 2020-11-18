@@ -15,7 +15,14 @@ GRAY="\033[1;30m"
 
 # check a http endpoint
 check_http() {
-    local out=$(( curl --silent \
+    local proto=""
+    if [ $2 -eq 4 ]; then
+        proto="-4"
+    elif [ $2 -eq 6 ]; then
+        proto="-6"
+    fi
+
+    local out=$(( curl --silent $proto \
         --max-time 5 --connect-timeout 5 -k --max-redirs 32 -L \
         -w "\n%{time_total}\t%{http_code}\t%{num_connects}" \
         "$1"; echo -e "\t$?" 2> /dev/null ) | tail -n 1)
@@ -48,7 +55,14 @@ check_http() {
 
 # check a generic tcp endpoint
 check_tcp() {
-    local out=$( echo "$(timeout 1 curl -v telnet://$1 2>&1)" )
+    local proto=""
+    if [ $2 -eq 4 ]; then
+        proto="-4"
+    elif [ $2 -eq 6 ]; then
+        proto="-6"
+    fi
+
+    local out=$( echo "$(timeout 1 curl -v $proto telnet://$1 2>&1)" )
 
     if [ $ARG_VERBOSE -eq 1 ]; then
         >&2 echo -e "${PURPLE}[DEBUG] check_tcp $1${RESET}"
@@ -74,13 +88,26 @@ check_tcp() {
 
 # check via icmp
 check_icmp() {
-    local pingargs=( -c 2 )
-    if [[ "$(uname)" = MINGW* ]]
-    then
-        pingargs=( -n 3 )
+    local proto=""
+    local pingcmd=""
+    
+    local pingargs=()
+
+    if [ $2 -eq 4 ] && [[ "$(uname)" = MINGW* ]]; then
+        # Windows IPv4
+        pingargs=( ping -4 -n 3 )
+    elif [ $2 -eq 6 ] && [[ "$(uname)" = MINGW* ]]; then
+        # Windows IPv6
+        pingargs=( ping -6 -n 3 )
+    elif [ $2 -eq 6 ]; then
+        # Linux IPv6
+        pingargs=( ping6 -c 3 )
+    else
+        # Linux IPv4
+        pingargs=( ping -c 3 )
     fi
 
-    local out=$( ping "${ARGS[@]}" -w 3 $1 )
+    local out=$( "${ARGS[@]}" -w 3 $1 )
 
     if [ $ARG_VERBOSE -eq 1 ]; then
         >&2 echo -e "${PURPLE}[DEBUG] check_icmp $1${RESET}"
@@ -118,6 +145,7 @@ handle_result() {
     local out="$2"
     local url="$3"
     local servicename="$4"
+    local proto="$5"
 
     # split check output
     local exitcode=$(echo "$out" | awk '{print $1}')
@@ -143,6 +171,12 @@ handle_result() {
         # timestamp
         echo -n "[$(date --iso-8601=seconds)]"
         echo -n -e " $statecolor$checktype$RESET"
+
+        # ip version
+        if [ $proto -gt 0 ]
+        then
+            echo -n -e "${statecolor}$proto$RESET"
+        fi
 
         # service description
         if [ ! -z "$servicename" ]
@@ -191,13 +225,14 @@ exec_check() {
     local method=$1
     local urlname=$2
     local index=$3
+    local proto=$4
 
     # split url and service name
     local url=$(echo "$urlname" | awk -F  ";" '{print $1}')
     local servicename=$(echo "$urlname" | awk -F  ";" '{print $2}')
 
     # execute check and give it to handler
-    handle_result $index "$($method "$url")" "$url" "$servicename"
+    handle_result $index "$($method "$url" "$proto")" "$url" "$servicename" "$proto"
     check_res=$?
 
     if [ $check_res -eq 1 ]
@@ -222,17 +257,29 @@ then
     do
         key="$1"
         case $key in
+            --tcp4|--tcp6)
+                shift
+                URLS_TCP+=("${key: -1}$1")
+                ;;
             --tcp)
                 shift
-                URLS_TCP+=("$1")
+                URLS_TCP+=("0$1")
+                ;;
+            --http4|--http6)
+                shift
+                URLS_HTTP+=("${key: -1}$1")
                 ;;
             --http)
                 shift
-                URLS_HTTP+=("$1")
+                URLS_HTTP+=("0$1")
+                ;;
+            --icmp4|--icmp6)
+                shift
+                URLS_ICMP+=("${key: -1}$1")
                 ;;
             --icmp)
                 shift
-                URLS_ICMP+=("$1")
+                URLS_ICMP+=("0$1")
                 ;;
             --interval)
                 shift
@@ -273,8 +320,14 @@ then
     echo
     echo "--interval n      Delay between two checks"
     echo "--tcp host:port   Check a generic TCP port"
+    echo "--tcp4 host:port   Check a generic TCP port, force IPv4"
+    echo "--tcp6 host:port   Check a generic TCP port, force IPv6"
     echo "--http url        Check a HTTP(S) URL"
+    echo "--http4 url        Check a HTTP(S) URL, force IPv4"
+    echo "--http6 url        Check a HTTP(S) URL, force IPv6"
     echo "--icmp host       Ping a Hostname/IP"
+    echo "--icmp4 host       Ping a Hostname/IP, force IPv4"
+    echo "--icmp6 host       Ping a Hostname/IP, force IPv6"
     echo
     echo "Append a alias name to a check separated by a semicolon:"
     echo "--icmp \"8.8.8.8;google\""
@@ -305,21 +358,21 @@ do
     # http checks
     for value in "${URLS_HTTP[@]}"
     do
-        exec_check "check_http" "$value" "$I"
+        exec_check "check_http" "${value: 1}" "$I" "${value: :1}"
         I=$(($I+1))
     done
 
     # tcp checks
     for value in "${URLS_TCP[@]}"
     do
-        exec_check "check_tcp" "$value" "$I"
+        exec_check "check_tcp" "${value: 1}" "$I" "${value: :1}"
         I=$(($I+1))
     done
 
     # tcp icmp
     for value in "${URLS_ICMP[@]}"
     do
-        exec_check "check_icmp" "$value" "$I"
+        exec_check "check_icmp" "${value: 1}" "$I" "${value: :1}"
         I=$(($I+1))
     done
 
