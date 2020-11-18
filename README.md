@@ -4,6 +4,7 @@ Bash script to monitor HTTP and generic TCP services.
 
 - Only requires `curl` and `ping` (Linux and Windows is supported)
 - Supports ICMP, HTTP(S) and generic TCP connections
+- Enforce IPv4 or IPv4 for single checks
 - Define a alias name behind the URL
 - Send a [ASCII Bell](https://en.wikipedia.org/wiki/Bell_character) on state changes
 - Works on Git Bash (MinGW) on Windows
@@ -18,13 +19,21 @@ Usage: ./minimon.sh [--interval 30] [--tcp "example.com:4242[;aliasname]"]
 
 --interval n      Delay between two checks
 --tcp host:port   Check a generic TCP port
+--tcp4 host:port   Check a generic TCP port, force IPv4
+--tcp6 host:port   Check a generic TCP port, force IPv6
 --http url        Check a HTTP(S) URL
+--http4 url        Check a HTTP(S) URL, force IPv4
+--http6 url        Check a HTTP(S) URL, force IPv6
 --icmp host       Ping a Hostname/IP
+--icmp4 host       Ping a Hostname/IP, force IPv4
+--icmp6 host       Ping a Hostname/IP, force IPv6
 
 Append a alias name to a check separated by a semicolon:
 --icmp "8.8.8.8;google"
 
 -v, --verbose     Enable verbose mode
+-w, --warnings    Show warning output
+-e, --errors      Show error output
 -h, --help        Print this help
 ```
 
