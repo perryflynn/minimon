@@ -15,6 +15,7 @@ GRAY="\033[1;30m"
 
 # check a http endpoint
 check_http() {
+    # ip version
     local proto=""
     local protoname=""
     if [ $2 -eq 4 ]; then
@@ -25,11 +26,25 @@ check_http() {
         protoname="6"
     fi
 
-    local out=$(( curl --silent $proto \
-        --max-time 5 --connect-timeout 5 -k --max-redirs 32 -L \
+    # http redirect
+    local rediropts=( --max-redirs 32 -L )
+    if [ $ARG_NOFOLLOWREDIR -eq 1 ]; then
+        rediropts=()
+    fi
+
+    # tls
+    local tlsopts=()
+    if [ $ARG_INVALTLS -eq 1 ]; then
+        tlsopts=( -k )
+    fi
+
+    # execute check
+    local out=$(( curl --silent $proto "${rediropts[@]}" "${tlsopts[@]}" \
+        --max-time 5 --connect-timeout 5  \
         -w "\n%{time_total}\t%{http_code}\t%{num_connects}" \
         "$1"; echo -e "\t$?" 2> /dev/null ) | tail -n 1)
 
+    # result
     local time=$(echo -e "$out" | awk '{print $1}')
     local status=$(echo -e "$out" | awk '{print $2}')
     local code=$(echo -e "$out" | awk '{print $4}')
@@ -268,6 +283,8 @@ ARG_HELP=0
 ARG_VERBOSE=0
 ARG_ERRORS=0
 ARG_WARNINGS=0
+ARG_NOFOLLOWREDIR=0
+ARG_INVALTLS=0
 ARG_INTERVAL=30
 UNKNOWN_OPTION=0
 URLS_HTTP=()
@@ -320,6 +337,12 @@ then
             -v|--verbose)
                 ARG_VERBOSE=1
                 ;;
+            --no-redirect)
+                ARG_NOFOLLOWREDIR=1
+                ;;
+            --invalid-tls)
+                ARG_INVALTLS=1
+                ;;
             *)
                 # unknown option
                 ARG_HELP=1
@@ -347,24 +370,27 @@ then
     echo
     echo "Usage: $0 [--interval 30] [--tcp \"example.com:4242[;aliasname]\"]"
     echo
-    echo "--interval n      Delay between two checks"
-    echo "--tcp host:port   Check a generic TCP port"
+    echo "--interval n       Delay between two checks"
+    echo "--tcp host:port    Check a generic TCP port"
     echo "--tcp4 host:port   Check a generic TCP port, force IPv4"
     echo "--tcp6 host:port   Check a generic TCP port, force IPv6"
-    echo "--http url        Check a HTTP(S) URL"
+    echo "--http url         Check a HTTP(S) URL"
     echo "--http4 url        Check a HTTP(S) URL, force IPv4"
     echo "--http6 url        Check a HTTP(S) URL, force IPv6"
-    echo "--icmp host       Ping a Hostname/IP"
+    echo "--icmp host        Ping a Hostname/IP"
     echo "--icmp4 host       Ping a Hostname/IP, force IPv4"
     echo "--icmp6 host       Ping a Hostname/IP, force IPv6"
     echo
     echo "Append a alias name to a check separated by a semicolon:"
     echo "--icmp \"8.8.8.8;google\""
     echo
-    echo "-v, --verbose     Enable verbose mode"
-    echo "-w, --warnings    Show warning output"
-    echo "-e, --errors      Show error output"
-    echo "-h, --help        Print this help"
+    echo "--no-redirect      Do not follow HTTP redirects"
+    echo "--invalid-tls      Ignore invalid TLS certificates"
+    echo
+    echo "-v, --verbose      Enable verbose mode"
+    echo "-w, --warnings     Show warning output"
+    echo "-e, --errors       Show error output"
+    echo "-h, --help         Print this help"
     echo
     exit
 fi
