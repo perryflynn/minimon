@@ -107,7 +107,7 @@ check_icmp() {
         pingargs=( ping -c 3 )
     fi
 
-    local out=$( "${ARGS[@]}" -w 3 $1 )
+    local out=$( "${pingargs[@]}" -w 3 $1 )
 
     if [ $ARG_VERBOSE -eq 1 ]; then
         >&2 echo -e "${PURPLE}[DEBUG] check_icmp $1${RESET}"
