@@ -51,10 +51,10 @@ check_http() {
 
     local cmkcode=2
     local cmktext="CRIT"
-    if [ $code -eq 0 ] && [[ $status = 2* ]]; then
+    if [ ! -z "$code" ] && [ $code -eq 0 ] && [[ $status = 2* ]]; then
         cmkcode=0
         cmktext="OK"
-    elif [ $code -eq 0 ]; then
+    elif [ ! -z "$code" ] && [ $code -eq 0 ]; then
         cmkcode=1
         cmktext="WARN"
     fi
@@ -265,7 +265,12 @@ exec_check() {
 
     local starttime=$(date +%s%N | cut -b1-13)
     local out=$($method "$url" "$proto")
-    local timespend=$(echo "scale=3; x=($(date +%s%N | cut -b1-13) - $starttime) / 1000; if(x<1 && x > 0) print 0; x" | bc -l)
+    
+    local timespend=$(( ($(date +%s%N | cut -b1-13) - $starttime) / 1000 ))
+    if command -v bc &> /dev/null
+    then
+        timespend=$(echo "scale=3; x=($(date +%s%N | cut -b1-13) - $starttime) / 1000; if(x<1 && x > 0) print 0; x" | bc -l)
+    fi
 
     # execute check and give it to handler
     handle_result $index "$out" "$url" "$servicename" "$proto" "$timespend"
