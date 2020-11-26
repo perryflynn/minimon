@@ -9,6 +9,12 @@ Bash script to monitor HTTP and generic TCP services.
 - Send a [ASCII Bell](https://en.wikipedia.org/wiki/Bell_character) on state changes
 - Works on Git Bash (MinGW) on Windows
 
+## Download
+
+```sh
+curl -L https://github.com/perryflynn/minimon/raw/master/minimon.sh > minimon.sh && chmod a+x minimon.sh
+```
+
 ## Usage
 
 ```txt
