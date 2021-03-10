@@ -4,6 +4,8 @@
 # 2020 by Christian Blechert <christian@serverless.industries>
 # https://github.com/perryflynn/minimon
 
+set -u
+
 # console colors
 RED="\033[0;31m"
 GREEN="\033[0;32m"
@@ -193,7 +195,7 @@ handle_result() {
     fi
 
     # print update when status was changed
-    if [ ! "${laststatus[$index]}" == "$statusmsghash;$exitcode" ]
+    if [ ! "${laststatus[$index]:-}" == "$statusmsghash;$exitcode" ]
     then
         # timestamp
         echo -n "[$(date --iso-8601=seconds)]"
@@ -230,7 +232,7 @@ handle_result() {
         fi
 
         # duration until this change
-        if [ ! -z "${statusts[$index]}" ]
+        if [ ! -z "${statusts[$index]:-}" ]
         then
             echo -n -e " - changed after ${PURPLE}$(($(date +%s)-${statusts[$index]}))s${RESET}"
         fi
@@ -264,8 +266,9 @@ exec_check() {
     local servicename=$(echo "$urlname" | awk -F  ";" '{print $2}')
 
     local starttime=$(date +%s%N | cut -b1-13)
-    local out=$($method "$url" "$proto")
-    
+    local out; out=$($method "$url" "$proto")
+    local check_res=$?
+
     local timespend=$(( ($(date +%s%N | cut -b1-13) - $starttime) / 1000 ))
     if command -v bc &> /dev/null
     then
@@ -273,13 +276,16 @@ exec_check() {
     fi
 
     # execute check and give it to handler
+    local ischanged
     handle_result $index "$out" "$url" "$servicename" "$proto" "$timespend"
-    check_res=$?
+    ischanged=$?
 
-    if [ $check_res -eq 1 ]
+    if [ $ischanged -eq 1 ]
     then
         CHANGED=1
     fi
+
+    return $check_res
 }
 
 
@@ -291,6 +297,7 @@ ARG_WARNINGS=0
 ARG_NOFOLLOWREDIR=0
 ARG_INVALTLS=0
 ARG_INTERVAL=30
+ARG_MAXCHECKS=-1
 UNKNOWN_OPTION=0
 URLS_HTTP=()
 URLS_TCP=()
@@ -329,6 +336,10 @@ then
             --interval)
                 shift
                 ARG_INTERVAL=$1
+                ;;
+            --max-checks)
+                shift
+                ARG_MAXCHECKS=$1
                 ;;
             -h|--help)
                 ARG_HELP=1
@@ -389,6 +400,9 @@ then
     echo "Append a alias name to a check separated by a semicolon:"
     echo "--icmp \"8.8.8.8;google\""
     echo
+    echo "--max-checks n     Only test n times"
+    echo "exit 0 = all ok; exit 1 = partially ok; exit 2 = all failed"
+    echo
     echo "--no-redirect      Do not follow HTTP redirects"
     echo "--invalid-tls      Ignore invalid TLS certificates"
     echo
@@ -411,16 +425,21 @@ fi
 # Monitoring
 laststatus=()
 statusts=()
+loop_i=$ARG_MAXCHECKS
+successful_i=0
+witherrors_i=0
 
-while true
+while [ $loop_i -eq -1 ] || [ $loop_i -gt 0 ]
 do
     I=0
     CHANGED=0
+    HASERRORS=0
 
     # http checks
     for value in "${URLS_HTTP[@]}"
     do
         exec_check "check_http" "${value: 1}" "$I" "${value: :1}"
+        if [ $? -ne 0 ]; then HASERRORS=1; fi
         I=$(($I+1))
     done
 
@@ -428,6 +447,7 @@ do
     for value in "${URLS_TCP[@]}"
     do
         exec_check "check_tcp" "${value: 1}" "$I" "${value: :1}"
+        if [ $? -ne 0 ]; then HASERRORS=1; fi
         I=$(($I+1))
     done
 
@@ -435,6 +455,7 @@ do
     for value in "${URLS_ICMP[@]}"
     do
         exec_check "check_icmp" "${value: 1}" "$I" "${value: :1}"
+        if [ $? -ne 0 ]; then HASERRORS=1; fi
         I=$(($I+1))
     done
 
@@ -444,6 +465,32 @@ do
         echo -ne "\007"
     fi
 
+    # update error counters
+    if [ $HASERRORS -eq 0 ]; then
+        successful_i=$(($successful_i+1))
+    else
+        witherrors_i=$(($witherrors_i+1))
+    fi
+
+    # interval counter
+    if [ $ARG_MAXCHECKS -gt 0 ]; then
+        loop_i=$(($loop_i-1))
+    fi
+
     # sleep for given interval
-    sleep $ARG_INTERVAL
+    if [ $ARG_MAXCHECKS -lt 0 ] || [ $loop_i -gt 0 ]; then
+        sleep $ARG_INTERVAL
+    fi
+    
 done
+
+if [ $successful_i -gt 0 ] && [ $witherrors_i -le 0 ]; then
+    # all okay
+    exit 0
+elif [ $successful_i -le 0 ] && [ $witherrors_i -gt 0 ]; then
+    # all failed
+    exit 2
+else
+    # partially failed
+    exit 1
+fi
