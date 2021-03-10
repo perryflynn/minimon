@@ -8,6 +8,7 @@ Bash script to monitor HTTP and generic TCP services.
 - Define a alias name behind the URL
 - Send a [ASCII Bell](https://en.wikipedia.org/wiki/Bell_character) on state changes
 - Works on Git Bash (MinGW) on Windows
+- Limit the number of checks to use the script as healthcheck in CI pipelines
 
 ## Download
 
@@ -36,6 +37,9 @@ Usage: ./minimon.sh [--interval 30] [--tcp "example.com:4242[;aliasname]"]
 
 Append a alias name to a check separated by a semicolon:
 --icmp "8.8.8.8;google"
+
+--max-checks n     Only test n times
+exit 0 = all ok; exit 1 = partially ok; exit 2 = all failed
 
 --no-redirect      Do not follow HTTP redirects
 --invalid-tls      Ignore invalid TLS certificates
