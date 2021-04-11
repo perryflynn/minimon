@@ -13,7 +13,6 @@ YELLOW="\033[0;33m"
 PURPLE="\033[0;35m"
 BLUE="\033[0;36m"
 RESET="\033[0m"
-GRAY="\033[1;30m"
 
 # check a http endpoint
 check_http() {
@@ -207,7 +206,7 @@ handle_result() {
         statecolor="$YELLOW"
         statename="WARN"
     elif [ $exitcode -eq 3 ]; then
-        statecolor="$GRAY"
+        statecolor=""
         statename="UNKNOWN"
     fi
 
@@ -234,12 +233,12 @@ handle_result() {
 
         # time
         echo -n " -"
-        echo -n -e " $GRAY${timespend}s$RESET"
+        echo -n -e " ${timespend}s"
 
         # protocol status code
         if [ ! -z "$statusmessage" ]
         then
-            echo -n -e " - $GRAY$statusmessage$RESET"
+            echo -n -e " - $statusmessage"
         fi
 
         # duration until this change
