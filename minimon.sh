@@ -61,6 +61,13 @@ check_http() {
         cmktext="WARN"
     fi
 
+    # exit code info
+    local exitinfo=""
+    if [ $code -ne 0 ]; then
+        exitinfo=" EXIT::$code"
+    fi
+
+    # verbose info
     if [ $ARG_VERBOSE -eq 1 ] || ( [ $ARG_ERRORS -eq 1 ] && [ $cmkcode -eq 2 ] ) || ( [ $ARG_WARNINGS -eq 1 ] && [ $cmkcode -eq 1 ] ); then
         >&2 echo -e "${PURPLE}[DEBUG] check_http$protoname $1${RESET}"
         >&2 echo -e -n "$BLUE"
@@ -69,7 +76,7 @@ check_http() {
         >&2 echo -n -e "$RESET"
     fi
 
-    echo "$cmkcode http${protoname} - HTTP $status" #; ${time} seconds"
+    echo "$cmkcode http${protoname} - HTTP::${status}${exitinfo}" #; ${time} seconds"
     return $cmkcode
 }
 
@@ -246,6 +253,16 @@ handle_result() {
         # update state variables
         laststatus[$index]="$statusmsghash;$exitcode"
         statusts[$index]=$(date +%s)
+
+        # curl info
+        if [ $curlinfoshown -eq 0 ] && [ "${checktype:0:4}" == "http" ] && [[ $statusmessage =~ EXIT::[0-9]+ ]]; then
+            echo
+            echo "Non-Zero exit code from curl. Checkout:"
+            echo "https://everything.curl.dev/usingcurl/returns"
+            echo
+            curlinfoshown=1
+        fi
+
         return 1
 
     else
@@ -432,6 +449,7 @@ statusts=()
 loop_i=$ARG_MAXCHECKS
 successful_i=0
 witherrors_i=0
+curlinfoshown=0
 
 while [ $loop_i -eq -1 ] || [ $loop_i -gt 0 ]
 do
