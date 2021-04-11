@@ -69,7 +69,7 @@ check_http() {
         >&2 echo -n -e "$RESET"
     fi
 
-    echo "$cmkcode http - HTTP $status" #; ${time} seconds"
+    echo "$cmkcode http${protoname} - HTTP $status" #; ${time} seconds"
     return $cmkcode
 }
 
@@ -105,7 +105,7 @@ check_tcp() {
         >&2 echo -n -e "$RESET"
     fi
 
-    echo "$cmkcode tcp - $text"
+    echo "$cmkcode tcp${protoname} - $text"
     return $cmkcode
 }
 
@@ -125,14 +125,21 @@ check_icmp() {
         # Windows IPv6
         pingargs=( ping -6 -n 3 )
         protoname="6"
+    elif [ $2 -eq 0 ] && [[ "$(uname)" = MINGW* ]]; then
+        # Windows automatic protocol detection
+        pingargs=( ping -n 3 )
+        protoname=""
     elif [ $2 -eq 6 ]; then
         # Linux IPv6
         pingargs=( ping6 -c 3 )
         protoname="6"
-    else
-        # Linux IPv4
+    elif [ $2 -eq 4 ] || [ $2 -eq 0 ]; then
+        # Linux IPv4 or fallback if no protocol preference given
         pingargs=( ping -c 3 )
         protoname="4"
+    else
+        echo "3 icmp - Unexpected parameters given, abort"
+        return 3
     fi
 
     local out=$( "${pingargs[@]}" -w 5 $1 2>&1 )
@@ -163,7 +170,7 @@ check_icmp() {
         >&2 echo -n -e "$RESET"
     fi
 
-    echo "$cmkcode icmp - $text"
+    echo "$cmkcode icmp${protoname} - $text"
     return $cmkcode
 }
 
@@ -192,6 +199,9 @@ handle_result() {
     elif [ $exitcode -eq 1 ]; then
         statecolor="$YELLOW"
         statename="WARN"
+    elif [ $exitcode -eq 3 ]; then
+        statecolor="$GRAY"
+        statename="UNKNOWN"
     fi
 
     # print update when status was changed
@@ -200,12 +210,6 @@ handle_result() {
         # timestamp
         echo -n "[$(date --iso-8601=seconds)]"
         echo -n -e " $statecolor$checktype$RESET"
-
-        # ip version
-        if [ $proto -gt 0 ]
-        then
-            echo -n -e "${statecolor}$proto$RESET"
-        fi
 
         # service description
         if [ ! -z "$servicename" ]
@@ -481,7 +485,7 @@ do
     if [ $ARG_MAXCHECKS -lt 0 ] || [ $loop_i -gt 0 ]; then
         sleep $ARG_INTERVAL
     fi
-    
+
 done
 
 if [ $successful_i -gt 0 ] && [ $witherrors_i -le 0 ]; then
