@@ -9,6 +9,7 @@ Bash script to monitor HTTP and generic TCP services.
 - Send a [ASCII Bell](https://en.wikipedia.org/wiki/Bell_character) on state changes
 - Works on Git Bash (MinGW) on Windows
 - Limit the number of checks to use the script as healthcheck in CI pipelines
+- Use simple shell scripts as check plugins
 
 ## Download
 
@@ -34,15 +35,22 @@ Usage: ./minimon.sh [--interval 30] [--tcp "example.com:4242[;aliasname]"]
 --icmp host        Ping a Hostname/IP
 --icmp4 host       Ping a Hostname/IP, force IPv4
 --icmp6 host       Ping a Hostname/IP, force IPv6
+--script script    Path to a script to use as a check
 
 Append a alias name to a check separated by a semicolon:
 --icmp "8.8.8.8;google"
+
+A script must output one line of text
+and must set a exit code like so:
+0=OK; 1=WARN; 2=NOK; 3=UNKNOWN
 
 --max-checks n     Only test n times
 exit 0 = all ok; exit 1 = partially ok; exit 2 = all failed
 
 --no-redirect      Do not follow HTTP redirects
 --invalid-tls      Ignore invalid TLS certificates
+--timeout          curl operation timeout
+--connect-timeout  curl connect timeout
 
 -v, --verbose      Enable verbose mode
 -w, --warnings     Show warning output
@@ -56,6 +64,7 @@ exit 0 = all ok; exit 1 = partially ok; exit 2 = all failed
     --tcp "files:445;fileserver" \
     --http "https://google.com;google" \
     --http "https://example.com" \
+    --script "./myscript;scriptname" \
     --icmp "8.8.8.8;google"
 ```
 

@@ -41,7 +41,7 @@ check_http() {
 
     # execute check
     local out=$(( curl --silent $proto "${rediropts[@]}" "${tlsopts[@]}" \
-        --max-time 5 --connect-timeout 5  \
+        --max-time "$ARG_TIMEOUT" --connect-timeout "$ARG_CONTIMEOUT"  \
         -w "\n%{time_total}\t%{http_code}\t%{num_connects}" \
         "$1"; echo -e "\t$?" 2> /dev/null ) | tail -n 1)
 
@@ -91,7 +91,7 @@ check_tcp() {
         protoname="6"
     fi
 
-    local out=$( echo "$(timeout 2 curl -v $proto telnet://$1 2>&1)" )
+    local out=$( echo "$(timeout "$ARG_CONTIMEOUT" curl -v $proto telnet://$1 2>&1)" )
 
     out=$( echo "$out" | grep -F "* Connected to " > /dev/null; echo $? )
 
@@ -137,11 +137,11 @@ check_icmp() {
         protoname=""
     elif [ $2 -eq 6 ]; then
         # Linux IPv6
-        pingargs=( ping6 -c 3 )
+        pingargs=( ping6 -c 3 -w $ARG_TIMEOUT )
         protoname="6"
     elif [ $2 -eq 4 ] || [ $2 -eq 0 ]; then
         # Linux IPv4 or fallback if no protocol preference given
-        pingargs=( ping -c 3 )
+        pingargs=( ping -c 3 -w $ARG_TIMEOUT )
         protoname="4"
     else
         echo "3 icmp - Unexpected parameters given, abort"
@@ -177,6 +177,23 @@ check_icmp() {
     fi
 
     echo "$cmkcode icmp${protoname} - $text"
+    return $cmkcode
+}
+
+# check via external script
+check_script() {
+    local url=$1
+    local cmkcode=2
+    local text="unable to execute script"
+
+    if [ -e "$url" ]; then
+        text=$($url)
+        cmkcode=$?
+    else
+        cmkcode=2
+    fi
+
+    echo "$cmkcode script - $text"
     return $cmkcode
 }
 
@@ -317,11 +334,14 @@ ARG_WARNINGS=0
 ARG_NOFOLLOWREDIR=0
 ARG_INVALTLS=0
 ARG_INTERVAL=30
+ARG_TIMEOUT=5
+ARG_CONTIMEOUT=-1
 ARG_MAXCHECKS=-1
 UNKNOWN_OPTION=0
 URLS_HTTP=()
 URLS_TCP=()
 URLS_ICMP=()
+URLS_SCRIPT=()
 
 if [ $# -ge 1 ]
 then
@@ -353,9 +373,21 @@ then
                 shift
                 URLS_ICMP+=("0$1")
                 ;;
+            --script)
+                shift
+                URLS_SCRIPT+=("0$1")
+                ;;
             --interval)
                 shift
                 ARG_INTERVAL=$1
+                ;;
+            --timeout)
+                shift
+                ARG_TIMEOUT=$1
+                ;;
+            --connect-timeout)
+                shift
+                ARG_CONTIMEOUT=$1
                 ;;
             --max-checks)
                 shift
@@ -393,6 +425,12 @@ else
 fi
 
 
+# use timeout for connect timeout if not specified separately
+if [ $ARG_CONTIMEOUT -lt 0 ]; then
+    ARG_CONTIMEOUT=$ARG_TIMEOUT
+fi
+
+
 # Help
 if [ $ARG_HELP -eq 1 ]
 then
@@ -416,15 +454,22 @@ then
     echo "--icmp host        Ping a Hostname/IP"
     echo "--icmp4 host       Ping a Hostname/IP, force IPv4"
     echo "--icmp6 host       Ping a Hostname/IP, force IPv6"
+    echo "--script script    Path to a script to use as a check"
     echo
     echo "Append a alias name to a check separated by a semicolon:"
     echo "--icmp \"8.8.8.8;google\""
+    echo
+    echo "A script must output one line of text"
+    echo "and must set a exit code like so:"
+    echo "0=OK; 1=WARN; 2=NOK; 3=UNKNOWN"
     echo
     echo "--max-checks n     Only test n times"
     echo "exit 0 = all ok; exit 1 = partially ok; exit 2 = all failed"
     echo
     echo "--no-redirect      Do not follow HTTP redirects"
     echo "--invalid-tls      Ignore invalid TLS certificates"
+    echo "--timeout          curl operation timeout"
+    echo "--connect-timeout  curl connect timeout"
     echo
     echo "-v, --verbose      Enable verbose mode"
     echo "-w, --warnings     Show warning output"
@@ -476,6 +521,14 @@ do
     for value in "${URLS_ICMP[@]}"
     do
         exec_check "check_icmp" "${value: 1}" "$I" "${value: :1}"
+        if [ $? -ne 0 ]; then HASERRORS=1; fi
+        I=$(($I+1))
+    done
+
+    # script
+    for value in "${URLS_SCRIPT[@]}"
+    do
+        exec_check "check_script" "${value: 1}" "$I" "${value: :1}"
         if [ $? -ne 0 ]; then HASERRORS=1; fi
         I=$(($I+1))
     done
