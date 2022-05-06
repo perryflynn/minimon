@@ -4,7 +4,7 @@ Bash script to monitor HTTP and generic TCP services.
 
 - Only requires `curl` and `ping` (Linux and Windows is supported)
 - Supports ICMP, HTTP(S) and generic TCP connections
-- Enforce IPv4 or IPv4 for single checks
+- Enforce IPv4 or IPv6 for single checks
 - Define a alias name behind the URL
 - Send a [ASCII Bell](https://en.wikipedia.org/wiki/Bell_character) on state changes
 - Works on Git Bash (MinGW) on Windows
