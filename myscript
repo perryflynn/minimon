@@ -1,4 +1,0 @@
-#!/bin/bash
-
-echo "script output here"
-exit $(( $(date +%s%N | cut -b1-13) % 4 ))

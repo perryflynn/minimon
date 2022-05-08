@@ -91,19 +91,23 @@ check_tcp() {
         protoname="6"
     fi
 
-    local out=$( echo "$(timeout "$ARG_CONTIMEOUT" curl -v $proto telnet://$1 2>&1)" )
+    # run telnet request
+    local out=$(timeout "$ARG_CONTIMEOUT" curl --silent -v $proto "telnet://$1" 2>&1)
 
-    out=$( echo "$out" | grep -F "* Connected to " > /dev/null; echo $? )
-
+    # build result
     local cmkcode=2
     local cmktext="CRIT"
     local text="Connect failed"
+
+    out=$( echo "$out" | grep -F "* Connected to " > /dev/null; echo $? )
+
     if [ $out -eq 0 ]; then
         cmkcode=0
         cmktext="OK"
         text="Connect successful"
     fi
 
+    # debug output
     if [ $ARG_VERBOSE -eq 1 ] || ( [ $ARG_ERRORS -eq 1 ] && [ $cmkcode -ne 0 ] ); then
         >&2 echo -e "${PURPLE}[DEBUG] check_tcp$protoname $1${RESET}"
         >&2 echo -e -n "$BLUE"
@@ -111,6 +115,7 @@ check_tcp() {
         >&2 echo -n -e "$RESET"
     fi
 
+    # report result
     echo "$cmkcode tcp${protoname} - $text"
     return $cmkcode
 }
@@ -148,11 +153,14 @@ check_icmp() {
         return 3
     fi
 
+    # run ping
     local out=$( "${pingargs[@]}" -w 5 $1 2>&1 )
 
+    # get packet loss
     local re='^[0-9]+$'
     loss=$( echo "$out" | grep -o -P "[0-9]+%" | cut -d'%' -f1 )
 
+    # build result
     local cmkcode=2
     local cmktext="CRIT"
     local text="Ping failed"
@@ -169,6 +177,7 @@ check_icmp() {
         text="$text (${loss}% loss)"
     fi
 
+    # debug output
     if [ $ARG_VERBOSE -eq 1 ] || ( [ $ARG_ERRORS -eq 1 ] && [ $cmkcode -eq 2 ] ) || ( [ $ARG_WARNINGS -eq 1 ] && [ $cmkcode -eq 1 ] ); then
         >&2 echo -e "${PURPLE}[DEBUG] check_icmp$protoname $1${RESET}"
         >&2 echo -e -n "$BLUE"
@@ -176,6 +185,7 @@ check_icmp() {
         >&2 echo -n -e "$RESET"
     fi
 
+    # report result
     echo "$cmkcode icmp${protoname} - $text"
     return $cmkcode
 }
@@ -186,13 +196,32 @@ check_script() {
     local cmkcode=2
     local text="unable to execute script"
 
-    if [ -e "$url" ]; then
-        text=$($url)
-        cmkcode=$?
-    else
+    # run script
+    text=$(( timeout "$ARG_CONTIMEOUT" $url 2>&1 ) | tr '\n' ' ' | tr '\t' ' ' | tr -d '\r'; exit ${PIPESTATUS[0]})
+    cmkcode=$?
+    
+    local originalcode=$cmkcode
+    local originaltext=""
+
+    # check for timeout
+    if [ $cmkcode -eq 124 ]; then
         cmkcode=2
+        originaltext=$text
+        text="script timed out after $ARG_CONTIMEOUT seconds"
     fi
 
+    # debug output
+    if [ $ARG_VERBOSE -eq 1 ] || ( [ $ARG_ERRORS -eq 1 ] && [ $cmkcode -ne 0 ] ); then
+        >&2 echo -e "${PURPLE}[DEBUG] check_script $url; Exit Code = $originalcode${RESET}"
+        >&2 echo -e -n "$BLUE"
+        if [ -n "$originaltext" ]; then
+            >&2 echo -e "$originaltext"
+        fi
+        >&2 echo -e "$text"
+        >&2 echo -n -e "$RESET"
+    fi
+
+    # report status
     echo "$cmkcode script - $text"
     return $cmkcode
 }

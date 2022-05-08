@@ -1,0 +1,11 @@
+#!/bin/bash
+
+echo "script output here"
+
+# random exit code between 0 and 3
+exit $(( $(date +%s%N | cut -b1-13) % 4 ))
+
+# exit 0 = OK
+# exit 1 = WARN
+# exit 2 = NOK
+# exit 3 = UNKNOWN
