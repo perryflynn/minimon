@@ -1,4 +1,4 @@
-#!/bin/bash
+#!/usr/bin/env bash
 
 # minimon - Minimalistic monitoring
 # 2020 by Christian Blechert <christian@serverless.industries>
@@ -196,8 +196,22 @@ check_script() {
     local cmkcode=2
     local text="unable to execute script"
 
+    # find script
+    local script; script=$(if [[ $url == ./* ]]; then which $url; else which ./$url; fi)
+    local scriptcode=$?
+
+    if [ $scriptcode -gt 0 ]; then
+        script=$(which $url)
+        scriptcode=$?
+    fi
+
+    if [ $scriptcode -gt 0 ] || [ -z "$script" ]; then
+        echo "3 script - no executable found"
+        return 3
+    fi
+
     # run script
-    text=$(( timeout "$ARG_CONTIMEOUT" $url 2>&1 ) | tr '\n' ' ' | tr '\t' ' ' | tr -d '\r'; exit ${PIPESTATUS[0]})
+    text=$(( timeout "$ARG_CONTIMEOUT" $script 2>&1 ) | tr '\n' ' ' | tr '\t' ' ' | tr -d '\r'; exit ${PIPESTATUS[0]})
     cmkcode=$?
     
     local originalcode=$cmkcode
@@ -212,7 +226,7 @@ check_script() {
 
     # debug output
     if [ $ARG_VERBOSE -eq 1 ] || ( [ $ARG_ERRORS -eq 1 ] && [ $cmkcode -ne 0 ] ); then
-        >&2 echo -e "${PURPLE}[DEBUG] check_script $url; Exit Code = $originalcode${RESET}"
+        >&2 echo -e "${PURPLE}[DEBUG] check_script $script; Exit Code = $originalcode${RESET}"
         >&2 echo -e -n "$BLUE"
         if [ -n "$originaltext" ]; then
             >&2 echo -e "$originaltext"
@@ -466,6 +480,7 @@ then
     if [ $UNKNOWN_OPTION -eq 1 ]
     then
         echo "Unknown option."
+        echo
     fi
 
     echo "minimon by Christian Blechert"
