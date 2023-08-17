@@ -1,7 +1,7 @@
 #!/usr/bin/env bash
 
 # minimon - Minimalistic monitoring
-# 2020 by Christian Blechert <christian@serverless.industries>
+# 2023 by Christian Blechert <christian@serverless.industries>
 # https://github.com/perryflynn/minimon
 
 set -u
@@ -60,6 +60,12 @@ check_http() {
         cmktext="WARN"
     fi
 
+    # status code info
+    local statusinfo=""
+    if [ $status -gt 0 ]; then
+        statusinfo=" HTTP::$status"
+    fi
+
     # exit code info
     local exitinfo=""
     if [ $code -ne 0 ]; then
@@ -75,7 +81,7 @@ check_http() {
         >&2 echo -n -e "$RESET"
     fi
 
-    echo "$cmkcode http${protoname} - HTTP::${status}${exitinfo}" #; ${time} seconds"
+    echo "$cmkcode http${protoname} -${statusinfo}${exitinfo}" #; ${time} seconds"
     return $cmkcode
 }
 
@@ -213,7 +219,7 @@ check_script() {
     # run script
     text=$(( timeout "$ARG_CONTIMEOUT" $script 2>&1 ) | tr '\n' ' ' | tr '\t' ' ' | tr -d '\r'; exit ${PIPESTATUS[0]})
     cmkcode=$?
-    
+
     local originalcode=$cmkcode
     local originaltext=""
 
@@ -238,6 +244,117 @@ check_script() {
     # report status
     echo "$cmkcode script - $text"
     return $cmkcode
+}
+
+curl_statuscode_to_text() {
+    local code=$1
+    local text=""
+    local hit=0
+    case $code in
+        0)
+            text="ok"
+            ;;
+        3)
+            text="url malformed"
+            ;;
+        5)
+            text="could not resolve proxy"
+            ;;
+        6)
+            text="could not resolve host"
+            ;;
+        7)
+            text="failed to connect to host"
+            ;;
+        28)
+            text="operation timeout"
+            ;;
+        47)
+            text="too many redirects"
+            ;;
+        51)
+            text="tls certificate verification failed"
+            ;;
+        52)
+            text="no response"
+            ;;
+        56)
+            text="failure in receiving network data"
+            ;;
+        60)
+            text="cannot authenticate with known ca certificates"
+            ;;
+        *)
+            text="check https://everything.curl.dev/usingcurl/returns"
+            hit=1
+            ;;
+    esac
+
+    echo -n "curl exit code '$code': $text"
+    return $hit
+}
+
+http_statuscode_to_text() {
+    local code=$1
+    local text=""
+    local hit=0
+    case $code in
+        200)
+            text="ok"
+            ;;
+        201)
+            text="created"
+            ;;
+        202)
+            text="accepted"
+            ;;
+        204)
+            text="no content"
+            ;;
+        301)
+            text="moved permanently"
+            ;;
+        302)
+            text="found (moved temporarily)"
+            ;;
+        304)
+            text="not modified"
+            ;;
+        400)
+            text="bad request"
+            ;;
+        401)
+            text="unauthorized"
+            ;;
+        403)
+            text="forbidden"
+            ;;
+        404)
+            text="not found"
+            ;;
+        405)
+            text="method not allowed"
+            ;;
+        500)
+            text="internal server error"
+            ;;
+        502)
+            text="bad gateway"
+            ;;
+        503)
+            text="service unavailable"
+            ;;
+        504)
+            text="gateway timeout"
+            ;;
+        *)
+            text="check https://en.wikipedia.org/wiki/List_of_HTTP_status_codes"
+            hit=1
+            ;;
+    esac
+
+    echo -n "http status code '$code': $text"
+    return $hit
 }
 
 # handle output of check, print update when it is a change
@@ -314,12 +431,16 @@ handle_result() {
         statusts[$index]=$(date +%s)
 
         # curl info
-        if [ $curlinfoshown -eq 0 ] && [ "${checktype:0:4}" == "http" ] && [[ $statusmessage =~ EXIT::[0-9]+ ]]; then
-            echo
-            echo "Non-Zero exit code from curl. Checkout:"
-            echo "https://everything.curl.dev/usingcurl/returns"
-            echo
-            curlinfoshown=1
+        if [ "${checktype:0:4}" == "http" ] && [[ $statusmessage =~ EXIT::[0-9]+ ]]; then
+            curlexitcode=$(echo "$statusmessage" | grep -o -P "EXIT::[0-9]+" | cut -d: -f3)
+            curltext=$(curl_statuscode_to_text "$curlexitcode")
+            >&2 echo -e "    $PURPLE$curltext$RESET"
+        fi
+
+        if [ "${checktype:0:4}" == "http" ] && ! [[ $statusmessage =~ HTTP::000 ]] && ! [[ $statusmessage =~ HTTP::2[0-9]+ ]] && [[ $statusmessage =~ HTTP::[0-9]+ ]]; then
+            curlexitcode=$(echo "$statusmessage" | grep -o -P "HTTP::[0-9]+" | cut -d: -f3)
+            curltext=$(http_statuscode_to_text "$curlexitcode")
+            >&2 echo -e "    $PURPLE$curltext$RESET"
         fi
 
         return 1
@@ -537,7 +658,6 @@ statusts=()
 loop_i=$ARG_MAXCHECKS
 successful_i=0
 witherrors_i=0
-curlinfoshown=0
 
 while [ $loop_i -eq -1 ] || [ $loop_i -gt 0 ]
 do
