@@ -655,77 +655,84 @@ fi
 # Monitoring
 LASTSTATUS=()
 STATUSTS=()
-loop_i=$ARG_MAXCHECKS
-successful_i=0
-witherrors_i=0
+SUCCESSFUL_I=0
+WITHERRORS_I=0
+CHANGED=0
 
-while [ $loop_i -eq -1 ] || [ $loop_i -gt 0 ]
-do
-    I=0
-    CHANGED=0
-    HASERRORS=0
+main_loop() {
+    local loop_i=$ARG_MAXCHECKS
+    local i=0
+    local haserrors=0
 
-    # http checks
-    for value in "${URLS_HTTP[@]}"
+    while [ $loop_i -eq -1 ] || [ $loop_i -gt 0 ]
     do
-        exec_check "check_http" "${value: 1}" "$I" "${value: :1}"
-        if [ $? -ne 0 ]; then HASERRORS=1; fi
-        I=$(($I+1))
+        i=0
+        haserrors=0
+
+        # http checks
+        for value in "${URLS_HTTP[@]}"
+        do
+            exec_check "check_http" "${value: 1}" "$i" "${value: :1}"
+            if [ $? -ne 0 ]; then haserrors=1; fi
+            i=$(($i+1))
+        done
+
+        # tcp checks
+        for value in "${URLS_TCP[@]}"
+        do
+            exec_check "check_tcp" "${value: 1}" "$i" "${value: :1}"
+            if [ $? -ne 0 ]; then haserrors=1; fi
+            i=$(($i+1))
+        done
+
+        # tcp icmp
+        for value in "${URLS_ICMP[@]}"
+        do
+            exec_check "check_icmp" "${value: 1}" "$i" "${value: :1}"
+            if [ $? -ne 0 ]; then haserrors=1; fi
+            i=$(($i+1))
+        done
+
+        # script
+        for value in "${URLS_SCRIPT[@]}"
+        do
+            exec_check "check_script" "${value: 1}" "$i" "${value: :1}"
+            if [ $? -ne 0 ]; then haserrors=1; fi
+            i=$(($i+1))
+        done
+
+        # ascii bell when change
+        if [ $CHANGED -eq 1 ]
+        then
+            echo -ne "\007"
+        fi
+
+        # update error counters
+        if [ $haserrors -eq 0 ]; then
+            SUCCESSFUL_I=$(($SUCCESSFUL_I+1))
+        else
+            WITHERRORS_I=$(($WITHERRORS_I+1))
+        fi
+
+        # interval counter
+        if [ $ARG_MAXCHECKS -gt 0 ]; then
+            loop_i=$(($loop_i-1))
+        fi
+
+        # sleep for given interval
+        if [ $ARG_MAXCHECKS -lt 0 ] || [ $loop_i -gt 0 ]; then
+            sleep $ARG_INTERVAL
+        fi
+
     done
+}
 
-    # tcp checks
-    for value in "${URLS_TCP[@]}"
-    do
-        exec_check "check_tcp" "${value: 1}" "$I" "${value: :1}"
-        if [ $? -ne 0 ]; then HASERRORS=1; fi
-        I=$(($I+1))
-    done
+main_loop
 
-    # tcp icmp
-    for value in "${URLS_ICMP[@]}"
-    do
-        exec_check "check_icmp" "${value: 1}" "$I" "${value: :1}"
-        if [ $? -ne 0 ]; then HASERRORS=1; fi
-        I=$(($I+1))
-    done
-
-    # script
-    for value in "${URLS_SCRIPT[@]}"
-    do
-        exec_check "check_script" "${value: 1}" "$I" "${value: :1}"
-        if [ $? -ne 0 ]; then HASERRORS=1; fi
-        I=$(($I+1))
-    done
-
-    # ascii bell when change
-    if [ $CHANGED -eq 1 ]
-    then
-        echo -ne "\007"
-    fi
-
-    # update error counters
-    if [ $HASERRORS -eq 0 ]; then
-        successful_i=$(($successful_i+1))
-    else
-        witherrors_i=$(($witherrors_i+1))
-    fi
-
-    # interval counter
-    if [ $ARG_MAXCHECKS -gt 0 ]; then
-        loop_i=$(($loop_i-1))
-    fi
-
-    # sleep for given interval
-    if [ $ARG_MAXCHECKS -lt 0 ] || [ $loop_i -gt 0 ]; then
-        sleep $ARG_INTERVAL
-    fi
-
-done
-
-if [ $successful_i -gt 0 ] && [ $witherrors_i -le 0 ]; then
+if [ $SUCCESSFUL_I -gt 0 ] && [ $WITHERRORS_I -le 0 ]; then
     # all okay
     exit 0
-elif [ $successful_i -le 0 ] && [ $witherrors_i -gt 0 ]; then
+elif [ $SUCCESSFUL_I -le 0 ] && [ $WITHERRORS_I -gt 0 ]; then
     # all failed
     exit 2
 else
