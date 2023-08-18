@@ -388,7 +388,7 @@ handle_result() {
     fi
 
     # print update when status was changed
-    if [ ! "${laststatus[$index]:-}" == "$statusmsghash;$exitcode" ]
+    if [ ! "${LASTSTATUS[$index]:-}" == "$statusmsghash;$exitcode" ]
     then
         # timestamp
         echo -n "[$(date --iso-8601=seconds)]"
@@ -419,16 +419,16 @@ handle_result() {
         fi
 
         # duration until this change
-        if [ ! -z "${statusts[$index]:-}" ]
+        if [ ! -z "${STATUSTS[$index]:-}" ]
         then
-            echo -n -e " - changed after ${PURPLE}$(($(date +%s)-${statusts[$index]}))s${RESET}"
+            echo -n -e " - changed after ${PURPLE}$(($(date +%s)-${STATUSTS[$index]}))s${RESET}"
         fi
 
         echo
 
         # update state variables
-        laststatus[$index]="$statusmsghash;$exitcode"
-        statusts[$index]=$(date +%s)
+        LASTSTATUS[$index]="$statusmsghash;$exitcode"
+        STATUSTS[$index]=$(date +%s)
 
         # curl info
         if [ "${checktype:0:4}" == "http" ] && [[ $statusmessage =~ EXIT::[0-9]+ ]]; then
@@ -653,8 +653,8 @@ fi
 
 
 # Monitoring
-laststatus=()
-statusts=()
+LASTSTATUS=()
+STATUSTS=()
 loop_i=$ARG_MAXCHECKS
 successful_i=0
 witherrors_i=0
