@@ -98,7 +98,7 @@ check_tcp() {
     fi
 
     # run telnet request
-    local out=$(timeout "$ARG_CONTIMEOUT" curl --silent -v $proto "telnet://$1" 2>&1)
+    local out=$(timeout "$ARG_CONTIMEOUT" curl --silent -v $proto "telnet://$1" <<<"this is minimon.sh connect test.\n\n" 2>&1)
 
     # build result
     local cmkcode=2
