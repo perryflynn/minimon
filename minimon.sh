@@ -6,6 +6,9 @@
 
 set -u
 
+# https://stackoverflow.com/a/54335338/4161736
+set +m
+
 # console colors
 RED="\033[0;31m"
 GREEN="\033[0;32m"
@@ -387,6 +390,8 @@ handle_result() {
         statename="UNKNOWN"
     fi
 
+    rm -f "${CACHEDIR}/${i}.states"
+
     # print update when status was changed
     if [ ! "${LASTSTATUS[$index]:-}" == "$statusmsghash;$exitcode" ]
     then
@@ -427,8 +432,8 @@ handle_result() {
         echo
 
         # update state variables
-        LASTSTATUS[$index]="$statusmsghash;$exitcode"
-        STATUSTS[$index]=$(date +%s)
+        echo "newstatus=\"$statusmsghash;$exitcode\"" >> "${CACHEDIR}/${i}.states"
+        echo "newstatusts=\"$(date +%s)\"" >> "${CACHEDIR}/${i}.states"
 
         # curl info
         if [ "${checktype:0:4}" == "http" ] && [[ $statusmessage =~ EXIT::[0-9]+ ]]; then
@@ -462,7 +467,6 @@ exec_check() {
     local proto=$4
 
     # split url and service name
-    # echo "scale=3; $(($(date +%s%N | cut -b1-13) - $start))/1000" | bc
     local url=$(echo "$urlname" | awk -F  ";" '{print $1}')
     local servicename=$(echo "$urlname" | awk -F  ";" '{print $2}')
 
@@ -479,15 +483,19 @@ exec_check() {
     # execute check and give it to handler
     local ischanged
     handle_result $index "$out" "$url" "$servicename" "$proto" "$timespend"
-    ischanged=$?
-
-    if [ $ischanged -eq 1 ]
-    then
-        CHANGED=1
-    fi
 
     return $check_res
 }
+
+
+# Cache directory and cleanup trap
+CACHEDIR=$(mktemp --suffix=minimonjobs --directory)
+
+cleanup() {
+    rm -rf "$CACHEDIR"
+}
+
+trap cleanup EXIT
 
 
 # Arguments
@@ -501,11 +509,9 @@ ARG_INTERVAL=30
 ARG_TIMEOUT=5
 ARG_CONTIMEOUT=-1
 ARG_MAXCHECKS=-1
+ARG_PARALLEL=10
 UNKNOWN_OPTION=0
-URLS_HTTP=()
-URLS_TCP=()
-URLS_ICMP=()
-URLS_SCRIPT=()
+URLS=()
 
 if [ $# -ge 1 ]
 then
@@ -515,31 +521,31 @@ then
         case $key in
             --tcp4|--tcp6)
                 shift
-                URLS_TCP+=("${key: -1}$1")
+                URLS+=("tcp|${key: -1}|$1")
                 ;;
             --tcp)
                 shift
-                URLS_TCP+=("0$1")
+                URLS+=("tcp|0|$1")
                 ;;
             --http4|--http6)
                 shift
-                URLS_HTTP+=("${key: -1}$1")
+                URLS+=("http|${key: -1}|$1")
                 ;;
             --http)
                 shift
-                URLS_HTTP+=("0$1")
+                URLS+=("http|0|$1")
                 ;;
             --icmp4|--icmp6)
                 shift
-                URLS_ICMP+=("${key: -1}$1")
+                URLS+=("icmp|${key: -1}|$1")
                 ;;
             --icmp)
                 shift
-                URLS_ICMP+=("0$1")
+                URLS+=("icmp|0|$1")
                 ;;
             --script)
                 shift
-                URLS_SCRIPT+=("0$1")
+                URLS+=("icmp|0|$1")
                 ;;
             --interval)
                 shift
@@ -556,6 +562,10 @@ then
             --max-checks)
                 shift
                 ARG_MAXCHECKS=$1
+                ;;
+            --parallel)
+                shift
+                ARG_PARALLEL=$1
                 ;;
             -h|--help)
                 ARG_HELP=1
@@ -635,6 +645,7 @@ then
     echo "--invalid-tls      Ignore invalid TLS certificates"
     echo "--timeout          curl operation timeout"
     echo "--connect-timeout  curl connect timeout"
+    echo "--parallel 10      number of checks execute in parallel"
     echo
     echo "-v, --verbose      Enable verbose mode"
     echo "-w, --warnings     Show warning output"
@@ -657,52 +668,72 @@ LASTSTATUS=()
 STATUSTS=()
 SUCCESSFUL_I=0
 WITHERRORS_I=0
-CHANGED=0
 
 main_loop() {
     local loop_i=$ARG_MAXCHECKS
     local i=0
+    local pi=0
     local haserrors=0
+    local changed=0
+    local jobcount=${#URLS[@]}
 
     while [ $loop_i -eq -1 ] || [ $loop_i -gt 0 ]
     do
         i=0
         haserrors=0
+        changed=0
 
-        # http checks
-        for value in "${URLS_HTTP[@]}"
+        while [ $i -lt $jobcount ]
         do
-            exec_check "check_http" "${value: 1}" "$i" "${value: :1}"
-            if [ $? -ne 0 ]; then haserrors=1; fi
-            i=$(($i+1))
-        done
+            pi=0
+            orgi=$i
 
-        # tcp checks
-        for value in "${URLS_TCP[@]}"
-        do
-            exec_check "check_tcp" "${value: 1}" "$i" "${value: :1}"
-            if [ $? -ne 0 ]; then haserrors=1; fi
-            i=$(($i+1))
-        done
+            # start jobs
+            for j in $(seq $orgi $(($jobcount - 1)))
+            do
+                local item=${URLS[$j]}
+                local check=$(echo "$item" | cut -d'|' -f1)
+                local proto=$(echo "$item" | cut -d'|' -f2)
+                local urlname=$(echo "$item" | cut -d'|' -f3)
 
-        # tcp icmp
-        for value in "${URLS_ICMP[@]}"
-        do
-            exec_check "check_icmp" "${value: 1}" "$i" "${value: :1}"
-            if [ $? -ne 0 ]; then haserrors=1; fi
-            i=$(($i+1))
-        done
+                ( exec_check "check_$check" "$urlname" "$j" "$proto" > "${CACHEDIR}/${i}.out" 2>&1 ) &
+                i=$(($i+1))
+                pi=$(($pi+1))
 
-        # script
-        for value in "${URLS_SCRIPT[@]}"
-        do
-            exec_check "check_script" "${value: 1}" "$i" "${value: :1}"
-            if [ $? -ne 0 ]; then haserrors=1; fi
-            i=$(($i+1))
+                if [ $pi -ge $ARG_PARALLEL ]; then
+                    break
+                fi
+            done
+
+            wait
+
+            # process results
+            for j in $(seq $orgi $(($i - 1)))
+            do
+                # print status
+                cat "${CACHEDIR}/${j}.out"
+
+                # state updates?
+                if [ -f "${CACHEDIR}/${j}.states" ]
+                then
+                    source "${CACHEDIR}/${j}.states"
+                    if [ -n "${newstatus:-}" ] && [ -n "${newstatusts:-}" ]; then
+                        LASTSTATUS[$j]="${newstatus}"
+                        STATUSTS[$j]="${newstatusts}"
+                        changed=1
+
+                        unset newstatus
+                        unset newstatusts
+                    fi
+                fi
+
+                # cleanup ststus files
+                rm -f "${CACHEDIR}/${j}".*
+            done
         done
 
         # ascii bell when change
-        if [ $CHANGED -eq 1 ]
+        if [ $changed -eq 1 ]
         then
             echo -ne "\007"
         fi

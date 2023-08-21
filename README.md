@@ -10,6 +10,7 @@ Bash script to monitor HTTP and generic TCP services.
 - Works on Git Bash (MinGW) on Windows
 - Limit the number of checks to use the script as healthcheck in CI pipelines
 - Use simple shell scripts as check plugins
+- Executes checks in parallel (controlled by `--parallel` option)
 
 ## Download
 
@@ -51,6 +52,7 @@ exit 0 = all ok; exit 1 = partially ok; exit 2 = all failed
 --invalid-tls      Ignore invalid TLS certificates
 --timeout          curl operation timeout
 --connect-timeout  curl connect timeout
+--parallel 10      number of checks execute in parallel
 
 -v, --verbose      Enable verbose mode
 -w, --warnings     Show warning output
