@@ -4,6 +4,9 @@
 # 2023 by Christian Blechert <christian@serverless.industries>
 # https://github.com/perryflynn/minimon
 
+APPNAME=minimon
+APPVERSION="2.0-alpha"
+
 set -u
 
 # https://stackoverflow.com/a/54335338/4161736
@@ -101,7 +104,7 @@ check_tcp() {
     fi
 
     # run telnet request
-    local out=$(timeout "$ARG_CONTIMEOUT" curl --silent -v $proto "telnet://$1" <<<"this is minimon.sh connect test.\n\n" 2>&1)
+    local out=$(timeout "$ARG_CONTIMEOUT" curl --silent -v $proto "telnet://$1" <<<"this is $APPNAME.sh connect test.\n\n" 2>&1)
 
     # build result
     local cmkcode=2
@@ -487,9 +490,26 @@ exec_check() {
     return $check_res
 }
 
+# import property from json file
+import_jsonprop() {
+    local varname=$1
+    local jsonpath=$2
+    local json=$3
+
+    value=$(echo "$json" | jq -c -r -M "$jsonpath")
+
+    if [ "$value" == "true" ]; then
+        eval "$varname=\"1\""
+    elif [ "$value" == "false" ]; then
+        eval "$varname=\"0\""
+    elif [ -n "$value" ] && [ ! "$value" == "null" ]; then
+        eval "$varname=\"$(echo -n "$value" | sed 's/"//g')\""
+    fi
+}
+
 
 # Cache directory and cleanup trap
-CACHEDIR=$(mktemp --suffix=minimonjobs --directory)
+CACHEDIR=$(mktemp --suffix="${APPNAME}jobs" --directory)
 
 cleanup() {
     rm -rf "$CACHEDIR"
@@ -500,6 +520,7 @@ trap cleanup EXIT
 
 # Arguments
 ARG_HELP=0
+ARG_VERSION=0
 ARG_VERBOSE=0
 ARG_ERRORS=0
 ARG_WARNINGS=0
@@ -512,7 +533,9 @@ ARG_MAXCHECKS=-1
 ARG_PARALLEL=10
 UNKNOWN_OPTION=0
 URLS=()
+CONFIG=()
 
+# Arguments from cli
 if [ $# -ge 1 ]
 then
     while [[ $# -ge 1 ]]
@@ -547,6 +570,10 @@ then
                 shift
                 URLS+=("icmp|0|$1")
                 ;;
+            --config)
+                shift
+                CONFIG+=("$1")
+                ;;
             --interval)
                 shift
                 ARG_INTERVAL=$1
@@ -569,6 +596,9 @@ then
                 ;;
             -h|--help)
                 ARG_HELP=1
+                ;;
+            -V|--version)
+                ARG_VERSION=1
                 ;;
             -e|--errors)
                 ARG_ERRORS=1
@@ -598,10 +628,38 @@ else
     ARG_HELP=1
 fi
 
+# Arguments from json
+if [ ${#CONFIG[@]} -gt 0 ] && ( ! command -v jq &> /dev/null ); then
+    echo "Using the '--config' option requires 'jq' to be installed"
+    exit 1
+fi
 
-# use timeout for connect timeout if not specified separately
-if [ $ARG_CONTIMEOUT -lt 0 ]; then
-    ARG_CONTIMEOUT=$ARG_TIMEOUT
+for jsonfile in "${CONFIG[@]}"
+do
+    content=$(cat "$jsonfile")
+    import_jsonprop ARG_INTERVAL ".\"interval\"" "$content"
+    import_jsonprop ARG_TIMEOUT ".\"timeout\"" "$content"
+    import_jsonprop ARG_CONTIMEOUT ".\"connect-timeout\"" "$content"
+    import_jsonprop ARG_MAXCHECKS ".\"max-checks\"" "$content"
+    import_jsonprop ARG_PARALLEL ".\"parallel\"" "$content"
+    import_jsonprop ARG_ERRORS ".\"errors\"" "$content"
+    import_jsonprop ARG_WARNINGS ".\"warnings\"" "$content"
+    import_jsonprop ARG_VERBOSE ".\"verbose\"" "$content"
+    import_jsonprop ARG_NOFOLLOWREDIR ".\"no-redirect\"" "$content"
+    import_jsonprop ARG_INVALTLS ".\"invalid-tls\"" "$content"
+
+    while read check
+    do
+        URLS+=("$check")
+    done <<<"$(echo "$content" | jq -r -c -M '.checks[] | (.type+"|"+(.proto//0|tostring)+"|"+.url+(if .alias then ";"+.alias else "" end))')"
+done
+
+
+# Version
+if [ $ARG_VERSION -eq 1 ]
+then
+    echo "$APPNAME $APPVERSION"
+    exit
 fi
 
 
@@ -614,7 +672,7 @@ then
         echo
     fi
 
-    echo "minimon by Christian Blechert"
+    echo "$APPNAME by Christian Blechert"
     echo "https://github.com/perryflynn/minimon"
     echo
     echo "Usage: $0 [--interval 30] [--tcp \"example.com:4242[;aliasname]\"]"
@@ -634,6 +692,12 @@ then
     echo "Append a alias name to a check separated by a semicolon:"
     echo "--icmp \"8.8.8.8;google\""
     echo
+    echo "Load settings from json files:"
+    echo "--config some-config.json"
+    echo
+    echo "Schema for editors like VSCode:"
+    echo "https://files.serverless.industries/schemas/minimon.json"
+    echo
     echo "A script must output one line of text"
     echo "and must set a exit code like so:"
     echo "0=OK; 1=WARN; 2=NOK; 3=UNKNOWN"
@@ -651,12 +715,19 @@ then
     echo "-w, --warnings     Show warning output"
     echo "-e, --errors       Show error output"
     echo "-h, --help         Print this help"
+    echo "-V, --version      Print the version"
     echo
     exit
 fi
 
 
-# check parameters
+# use timeout for connect timeout if not specified separately
+if [ $ARG_CONTIMEOUT -lt 0 ]; then
+    ARG_CONTIMEOUT=$ARG_TIMEOUT
+fi
+
+
+# ensure positive interval
 if [ -z "$ARG_INTERVAL" ] || [ $ARG_INTERVAL -lt 1 ]
 then
     ARG_INTERVAL=1
@@ -676,6 +747,8 @@ main_loop() {
     local haserrors=0
     local changed=0
     local jobcount=${#URLS[@]}
+
+    >&2 echo -e "${PURPLE}Execute $jobcount checks every $ARG_INTERVAL seconds, max $ARG_PARALLEL in parallel${RESET}"
 
     while [ $loop_i -eq -1 ] || [ $loop_i -gt 0 ]
     do

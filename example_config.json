@@ -1,0 +1,12 @@
+{
+    "$schema": "https://files.serverless.industries/schemas/minimon.json",
+    "checks": [
+        { "type": "http", "url": "http://example.com", "alias": "example" },
+        { "type": "icmp", "url": "8.8.8.8", "proto": "4" }
+    ],
+    "invalid-tls": true,
+    "interval": 10,
+    "parallel": 5,
+    "timeout": 5,
+    "connect-timeout": 2
+}

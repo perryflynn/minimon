@@ -11,6 +11,7 @@ Bash script to monitor HTTP and generic TCP services.
 - Limit the number of checks to use the script as healthcheck in CI pipelines
 - Use simple shell scripts as check plugins
 - Executes checks in parallel (controlled by `--parallel` option)
+- Load settings from a json file (requires `jq`)
 
 ## Download
 
@@ -41,6 +42,12 @@ Usage: ./minimon.sh [--interval 30] [--tcp "example.com:4242[;aliasname]"]
 Append a alias name to a check separated by a semicolon:
 --icmp "8.8.8.8;google"
 
+Load settings from json files:
+--config some-config.json
+
+Schema for editors like VSCode:
+https://files.serverless.industries/schemas/minimon.json
+
 A script must output one line of text
 and must set a exit code like so:
 0=OK; 1=WARN; 2=NOK; 3=UNKNOWN
@@ -58,6 +65,7 @@ exit 0 = all ok; exit 1 = partially ok; exit 2 = all failed
 -w, --warnings     Show warning output
 -e, --errors       Show error output
 -h, --help         Print this help
+-V, --version      Print the version
 ```
 
 ```sh

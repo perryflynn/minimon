@@ -1,0 +1,56 @@
+{
+    "$schema": "http://json-schema.org/draft-04/schema#",
+    "id": "https://files.serverless.industries/schemas/minimon.json",
+    "title": "JSON schema for minimon.sh",
+    "type": "object",
+    "properties": {
+        "checks": {
+            "type": "array",
+            "items": {
+                "type": "object",
+                "properties": {
+                    "type": { "type": "string", "enum": [ "icmp", "icmp4", "icmp6", "http", "http4", "http6", "tcp", "tcp4", "tcp6", "script" ] },
+                    "proto": { "type": "string", "enum": [ "0", "4", "6" ] },
+                    "url": { "type": "string" },
+                    "alias": { "type": "string" }
+                },
+                "required":[ "type", "url" ]
+            }
+        },
+        "invalid-tls": {
+            "type": "boolean"
+        },
+        "interval": {
+            "type": "integer",
+            "minimum": 1
+        },
+        "parallel": {
+            "type": "integer",
+            "minimum": 1
+        },
+        "timeout": {
+            "type": "integer",
+            "minimum": 1
+        },
+        "connect-timeout": {
+            "type": "integer",
+            "minimum": 1
+        },
+        "max-checks": {
+            "type": "integer",
+            "minimum": 1
+        },
+        "warnings": {
+            "type": "boolean"
+        },
+        "errors": {
+            "type": "boolean"
+        },
+        "verbose": {
+            "type": "boolean"
+        },
+        "no-redirect": {
+            "type": "boolean"
+        }
+    }
+}
