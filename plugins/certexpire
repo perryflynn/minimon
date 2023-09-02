@@ -1,0 +1,37 @@
+#!/bin/bash
+
+set -u
+
+URL=$1
+
+if ! ( command -v openssl 2> /dev/null >&2 ); then
+    echo "openssl binary not found"
+    exit 3
+fi
+
+dates=$(echo | (openssl s_client -verify_return_error -showcerts -connect "$URL" 2> /dev/null) | \
+    (openssl x509 -noout -dates -checkend "$((60*60*24*14))" 2> /dev/null); \
+    echo -e "codes=${PIPESTATUS[@]}")
+
+statusclient=$(echo "$dates" | grep -P "^codes=" | cut -d'=' -f2 | awk '{print $2}')
+statusdate=$(echo "$dates" | grep -P "^codes=" | cut -d'=' -f2 | awk '{print $3}')
+notafter=$(echo "$dates" | grep -P "^notAfter=" | cut -d'=' -f2)
+isexpiring=$(echo "$dates" | grep -q -P '^Certificate will expire$'; echo "$?")
+
+if [ $statusclient -gt 0 ]; then
+    echo "Vertification failed"
+    exit 2
+fi
+
+if [ $statusdate -gt 0 ] || [ -z "$notafter" ]; then
+    echo "Unable to get certificate expiration date"
+    exit 2
+fi
+
+if [ $isexpiring -le 0 ]; then
+    echo "Certificate valid but will expire on $notafter"
+    exit 1
+fi
+
+echo "Valid, expires on $notafter"
+exit 0

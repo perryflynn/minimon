@@ -208,12 +208,15 @@ check_script() {
     local cmkcode=2
     local text="unable to execute script"
 
-    # find script
-    local script; script=$(if [[ $url == ./* ]]; then which $url; else which ./$url; fi)
+    local binary=$(echo "$url" | awk '{print $1}')
+    local binargs=$(echo "$url" | awk '{$1=""; print $0}')
+
+    # find script in PATH or current directory
+    local script; script=$(if [[ $url == ./* ]]; then which $binary; else which ./$binary; fi)
     local scriptcode=$?
 
     if [ $scriptcode -gt 0 ]; then
-        script=$(which $url)
+        script=$(which $binary)
         scriptcode=$?
     fi
 
@@ -223,7 +226,7 @@ check_script() {
     fi
 
     # run script
-    text=$(( timeout "$ARG_CONTIMEOUT" $script 2>&1 ) | tr '\n' ' ' | tr '\t' ' ' | tr -d '\r'; exit ${PIPESTATUS[0]})
+    text=$(( timeout "$ARG_CONTIMEOUT" $script $binargs 2>&1 ) | tr '\n' ' ' | tr '\t' ' ' | tr -d '\r'; exit ${PIPESTATUS[0]})
     cmkcode=$?
 
     local originalcode=$cmkcode
@@ -568,7 +571,7 @@ then
                 ;;
             --script)
                 shift
-                URLS+=("icmp|0|$1")
+                URLS+=("script|0|$1")
                 ;;
             --config)
                 shift
