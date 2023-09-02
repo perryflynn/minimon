@@ -40,6 +40,12 @@
             "type": "integer",
             "minimum": 1
         },
+        "no-timestamps": {
+            "type": "boolean"
+        },
+        "short-timestamps": {
+            "type": "boolean"
+        },
         "warnings": {
             "type": "boolean"
         },

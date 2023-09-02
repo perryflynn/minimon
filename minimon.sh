@@ -402,8 +402,15 @@ handle_result() {
     if [ ! "${LASTSTATUS[$index]:-}" == "$statusmsghash;$exitcode" ]
     then
         # timestamp
-        echo -n "[$(date --iso-8601=seconds)]"
-        echo -n -e " $statecolor$checktype$RESET"
+        if [ $ARG_NOTIMESTAMPS -le 0 ]; then
+            if [ $ARG_SHORTTIMESTAMPS -gt 0 ]; then
+                echo -n "[$(date +%H:%M:%S)] "
+            else
+                echo -n "[$(date --iso-8601=seconds)] "
+            fi
+        fi
+
+        echo -n -e "$statecolor$checktype$RESET"
 
         # service description
         if [ ! -z "$servicename" ]
@@ -534,6 +541,8 @@ ARG_TIMEOUT=5
 ARG_CONTIMEOUT=-1
 ARG_MAXCHECKS=-1
 ARG_PARALLEL=10
+ARG_NOTIMESTAMPS=0
+ARG_SHORTTIMESTAMPS=0
 UNKNOWN_OPTION=0
 URLS=()
 CONFIG=()
@@ -597,6 +606,12 @@ then
                 shift
                 ARG_PARALLEL=$1
                 ;;
+            --no-timestamps)
+                ARG_NOTIMESTAMPS=1
+                ;;
+            --short-timestamps)
+                ARG_SHORTTIMESTAMPS=1
+                ;;
             -h|--help)
                 ARG_HELP=1
                 ;;
@@ -650,6 +665,8 @@ do
     import_jsonprop ARG_VERBOSE ".\"verbose\"" "$content"
     import_jsonprop ARG_NOFOLLOWREDIR ".\"no-redirect\"" "$content"
     import_jsonprop ARG_INVALTLS ".\"invalid-tls\"" "$content"
+    import_jsonprop ARG_NOTIMESTAMPS ".\"no-timestamps\"" "$content"
+    import_jsonprop ARG_SHORTTIMESTAMPS ".\"short-timestamps\"" "$content"
 
     while read check
     do
@@ -708,11 +725,13 @@ then
     echo "--max-checks n     Only test n times"
     echo "exit 0 = all ok; exit 1 = partially ok; exit 2 = all failed"
     echo
-    echo "--no-redirect      Do not follow HTTP redirects"
-    echo "--invalid-tls      Ignore invalid TLS certificates"
-    echo "--timeout          curl operation timeout"
-    echo "--connect-timeout  curl connect timeout"
-    echo "--parallel 10      number of checks execute in parallel"
+    echo "--no-redirect       Do not follow HTTP redirects"
+    echo "--invalid-tls       Ignore invalid TLS certificates"
+    echo "--timeout           curl operation timeout"
+    echo "--connect-timeout   curl connect timeout"
+    echo "--parallel 10       number of checks execute in parallel"
+    echo "--no-timestamps     disable timestamps"
+    echo "--short-timestamps  only show time, not the date"
     echo
     echo "-v, --verbose      Enable verbose mode"
     echo "-w, --warnings     Show warning output"
