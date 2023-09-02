@@ -11,7 +11,7 @@ Bash script to monitor HTTP and generic TCP services.
 - Limit the number of checks to use the script as healthcheck in CI pipelines
 - Use simple shell scripts as check plugins
 - Executes checks in parallel (controlled by `--parallel` option)
-- Load settings from a json file (requires `jq`)
+- Load settings from a json file (see `--config`, requires `jq`)
 
 ## Download
 
@@ -55,11 +55,13 @@ and must set a exit code like so:
 --max-checks n     Only test n times
 exit 0 = all ok; exit 1 = partially ok; exit 2 = all failed
 
---no-redirect      Do not follow HTTP redirects
---invalid-tls      Ignore invalid TLS certificates
---timeout          curl operation timeout
---connect-timeout  curl connect timeout
---parallel 10      number of checks execute in parallel
+--no-redirect       Do not follow HTTP redirects
+--invalid-tls       Ignore invalid TLS certificates
+--timeout           curl operation timeout
+--connect-timeout   curl connect timeout
+--parallel 10       number of checks execute in parallel
+--no-timestamps     disable timestamps
+--short-timestamps  only show time, not the date
 
 -v, --verbose      Enable verbose mode
 -w, --warnings     Show warning output
@@ -74,7 +76,7 @@ exit 0 = all ok; exit 1 = partially ok; exit 2 = all failed
     --tcp "files:445;fileserver" \
     --http "https://google.com;google" \
     --http "https://example.com" \
-    --script "./myscript;scriptname" \
+    --script "./myscript arg1;scriptname" \
     --icmp "8.8.8.8;google"
 ```
 
