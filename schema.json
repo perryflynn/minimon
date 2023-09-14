@@ -20,6 +20,9 @@
         "invalid-tls": {
             "type": "boolean"
         },
+        "unsafe-tls": {
+            "type": "boolean"
+        },
         "interval": {
             "type": "integer",
             "minimum": 1

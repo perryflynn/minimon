@@ -49,7 +49,7 @@ check_http() {
     local out=$(( curl --silent $proto "${rediropts[@]}" "${tlsopts[@]}" \
         --max-time "$ARG_TIMEOUT" --connect-timeout "$ARG_CONTIMEOUT"  \
         -w "\n%{time_total}\t%{http_code}\t%{num_connects}" \
-        "$1"; echo -e "\t$?" 2> /dev/null ) | tail -n 1)
+        "$1"; echo -e "\t$?" 2> /dev/null ) | tail -n 1 | tr -d '\0')
 
     # result
     local time=$(echo -e "$out" | awk '{print $1}')
@@ -104,7 +104,7 @@ check_tcp() {
     fi
 
     # run telnet request
-    local out=$(timeout "$ARG_CONTIMEOUT" curl --silent -v $proto "telnet://$1" <<<"this is $APPNAME.sh connect test.\n\n" 2>&1)
+    local out=$(( timeout "$ARG_CONTIMEOUT" curl --silent -v $proto "telnet://$1" <<<"this is $APPNAME.sh connect test.\n\n" 2>&1 ) | tr -d '\0')
 
     # build result
     local cmkcode=2
@@ -166,7 +166,7 @@ check_icmp() {
     fi
 
     # run ping
-    local out=$( "${pingargs[@]}" -w 5 $1 2>&1 )
+    local out=$(( "${pingargs[@]}" -w 5 $1 2>&1 )  | tr -d '\0')
 
     # get packet loss
     local re='^[0-9]+$'
@@ -536,6 +536,7 @@ ARG_ERRORS=0
 ARG_WARNINGS=0
 ARG_NOFOLLOWREDIR=0
 ARG_INVALTLS=0
+ARG_UNSAFETLS=0
 ARG_INTERVAL=30
 ARG_TIMEOUT=5
 ARG_CONTIMEOUT=-1
@@ -633,6 +634,9 @@ then
             --invalid-tls)
                 ARG_INVALTLS=1
                 ;;
+            --unsafe-tls)
+                ARG_UNSAFETLS=1
+                ;;
             *)
                 # unknown option
                 ARG_HELP=1
@@ -667,6 +671,7 @@ do
     import_jsonprop ARG_INVALTLS ".\"invalid-tls\"" "$content"
     import_jsonprop ARG_NOTIMESTAMPS ".\"no-timestamps\"" "$content"
     import_jsonprop ARG_SHORTTIMESTAMPS ".\"short-timestamps\"" "$content"
+    import_jsonprop ARG_UNSAFETLS ".\"unsafe-tls\"" "$content"
 
     while read check
     do
@@ -727,6 +732,7 @@ then
     echo
     echo "--no-redirect       Do not follow HTTP redirects"
     echo "--invalid-tls       Ignore invalid TLS certificates"
+    echo "--unsafe-tls        Accept very unsafe and old crypto"
     echo "--timeout           curl operation timeout"
     echo "--connect-timeout   curl connect timeout"
     echo "--parallel 10       number of checks execute in parallel"
@@ -753,6 +759,18 @@ fi
 if [ -z "$ARG_INTERVAL" ] || [ $ARG_INTERVAL -lt 1 ]
 then
     ARG_INTERVAL=1
+fi
+
+# allow unsafe crypto
+# can/should be used with invalid-tls option
+if [ $ARG_UNSAFETLS -gt 0 ]
+then
+    (
+        cat /etc/ssl/openssl.cnf
+        echo "Options = UnsafeLegacyRenegotiation"
+        echo "CipherString = DEFAULT@SECLEVEL=1"
+    ) > $CACHEDIR/openssl-unsafe.conf
+    export OPENSSL_CONF="$CACHEDIR/openssl-unsafe.conf"
 fi
 
 
