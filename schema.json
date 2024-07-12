@@ -9,7 +9,7 @@
             "items": {
                 "type": "object",
                 "properties": {
-                    "type": { "type": "string", "enum": [ "icmp", "icmp4", "icmp6", "http", "http4", "http6", "tcp", "tcp4", "tcp6", "script" ] },
+                    "type": { "type": "string", "enum": [ "icmp", "http", "tcp", "script" ] },
                     "proto": { "type": "string", "enum": [ "0", "4", "6" ] },
                     "url": { "type": "string" },
                     "alias": { "type": "string" }
