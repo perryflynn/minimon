@@ -39,6 +39,10 @@
             "type": "integer",
             "minimum": 1
         },
+        "time-spacer": {
+            "type": "integer",
+            "minimum": 0
+        },
         "max-checks": {
             "type": "integer",
             "minimum": 1
