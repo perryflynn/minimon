@@ -62,6 +62,7 @@ exit 0 = all ok; exit 1 = partially ok; exit 2 = all failed
 --parallel 10       number of checks execute in parallel
 --no-timestamps     disable timestamps
 --short-timestamps  only show time, not the date
+--time-spacer 30    add a spacer line if n seconds was no state change
 
 -v, --verbose      Enable verbose mode
 -w, --warnings     Show warning output

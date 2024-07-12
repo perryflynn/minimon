@@ -544,6 +544,7 @@ ARG_MAXCHECKS=-1
 ARG_PARALLEL=10
 ARG_NOTIMESTAMPS=0
 ARG_SHORTTIMESTAMPS=0
+ARG_TIMESPACER=0
 UNKNOWN_OPTION=0
 URLS=()
 CONFIG=()
@@ -613,6 +614,10 @@ then
             --short-timestamps)
                 ARG_SHORTTIMESTAMPS=1
                 ;;
+            --time-spacer)
+                shift
+                ARG_TIMESPACER=$1
+                ;;
             -h|--help)
                 ARG_HELP=1
                 ;;
@@ -672,6 +677,7 @@ do
     import_jsonprop ARG_NOTIMESTAMPS ".\"no-timestamps\"" "$content"
     import_jsonprop ARG_SHORTTIMESTAMPS ".\"short-timestamps\"" "$content"
     import_jsonprop ARG_UNSAFETLS ".\"unsafe-tls\"" "$content"
+    import_jsonprop ARG_TIMESPACER ".\"time-spacer\"" "$content"
 
     while read check
     do
@@ -738,6 +744,7 @@ then
     echo "--parallel 10       number of checks execute in parallel"
     echo "--no-timestamps     disable timestamps"
     echo "--short-timestamps  only show time, not the date"
+    echo "--time-spacer 30    add a spacer line if n seconds was no state change"
     echo
     echo "-v, --verbose      Enable verbose mode"
     echo "-w, --warnings     Show warning output"
@@ -787,6 +794,7 @@ main_loop() {
     local haserrors=0
     local changed=0
     local jobcount=${#URLS[@]}
+    local lastchange=$(date +%s)
 
     >&2 echo -e "${PURPLE}Execute $jobcount checks every $ARG_INTERVAL seconds, max $ARG_PARALLEL in parallel${RESET}"
 
@@ -824,7 +832,16 @@ main_loop() {
             for j in $(seq $orgi $(($i - 1)))
             do
                 # print status
-                cat "${CACHEDIR}/${j}.out"
+                if [ -s "${CACHEDIR}/${j}.out" ]; then
+                    now=$(date +%s)
+                    if [ $ARG_TIMESPACER -gt 0 ] && [ $(($lastchange + $ARG_TIMESPACER)) -lt $now ]; then
+                        echo
+                        echo
+                    fi
+
+                    cat "${CACHEDIR}/${j}.out"
+                    lastchange=$now
+                fi
 
                 # state updates?
                 if [ -f "${CACHEDIR}/${j}.states" ]
