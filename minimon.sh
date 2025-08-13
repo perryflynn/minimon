@@ -410,7 +410,7 @@ handle_result() {
             fi
         fi
 
-        echo -n -e "$statecolor$checktype$RESET"
+        echo -n -e "[$index] $statecolor$checktype$RESET"
 
         # service description
         if [ ! -z "$servicename" ]
