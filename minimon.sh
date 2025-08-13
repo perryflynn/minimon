@@ -795,6 +795,7 @@ main_loop() {
     local changed=0
     local jobcount=${#URLS[@]}
     local lastchange=$(date +%s)
+    local lastday=$(date +%Y-%m-%d)
 
     >&2 echo -e "${PURPLE}Execute $jobcount checks every $ARG_INTERVAL seconds, max $ARG_PARALLEL in parallel${RESET}"
 
@@ -803,6 +804,12 @@ main_loop() {
         i=0
         haserrors=0
         changed=0
+
+        tempday=$(date +%Y-%m-%d)
+        if [ ! "$lastday" == "$tempday" ]; then
+            lastday=$tempday
+            echo -e "${PURPLE}-- ${lastday} --${RESET}"
+        fi
 
         while [ $i -lt $jobcount ]
         do
