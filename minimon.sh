@@ -843,7 +843,6 @@ main_loop() {
                     now=$(date +%s)
                     if [ $ARG_TIMESPACER -gt 0 ] && [ $(($lastchange + $ARG_TIMESPACER)) -lt $now ]; then
                         echo
-                        echo
                     fi
 
                     cat "${CACHEDIR}/${j}.out"
